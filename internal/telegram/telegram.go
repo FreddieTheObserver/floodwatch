@@ -212,6 +212,13 @@ func (c *Client) SendMessage(ctx context.Context, m OutgoingMessage) error {
 	return c.call(ctx, "sendMessage", m, nil)
 }
 
+// SendVenue sends a named map pin, which opens in the phone's own maps app.
+func (c *Client) SendVenue(ctx context.Context, chatID int64, lat, lng float64, title, address string) error {
+	return c.call(ctx, "sendVenue", map[string]any{
+		"chat_id": chatID, "latitude": lat, "longitude": lng, "title": title, "address": address,
+	}, nil)
+}
+
 // EditMessageText replaces a message's text and drops its inline buttons.
 func (c *Client) EditMessageText(ctx context.Context, chatID, messageID int64, text, parseMode string) error {
 	params := map[string]any{"chat_id": chatID, "message_id": messageID, "text": text}
