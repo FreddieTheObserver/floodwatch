@@ -140,7 +140,7 @@ func sampleFindings() []alert.Finding {
 		{Key: alert.Key{StationID: 7, Rule: alert.RuleWaterRising}, Station: water, DistanceM: 5400, At: at, LevelMSL: 0.34, BankMSL: bank},
 		{Key: alert.Key{StationID: 7, Rule: alert.RuleWaterStale}, Known: true, Station: water, DistanceM: 5400, At: at},
 		{Key: alert.Key{Rule: alert.RuleRain}, Known: true, Severity: alert.SeverityWatch, Station: gauge, DistanceM: 4900, At: at,
-			Rain1h: ptr(0.5), Rain24h: ptr(124), FreshGauges: 7},
+			Rain1h: ptr(0.5), Rain24h: ptr(124), RainWindow: 24 * time.Hour, FreshGauges: 7},
 		{Key: alert.Key{Rule: alert.RuleRainStale}, Known: true, FreshGauges: 7},
 	}
 }

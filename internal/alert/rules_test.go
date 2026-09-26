@@ -222,9 +222,26 @@ func TestRainTakesWorstFreshGauge(t *testing.T) {
 		rain(north(14, source.KindRain, 4, nil), RainPoint{At: now.Add(-4 * time.Hour), Rain1h: mm(90)}) // stale
 
 	got := find(t, Assess(f.snap, home, nil), 0, RuleRain)
-	if !got.Known || got.Severity != SeverityWarning || got.Station.ID != 12 || got.FreshGauges != 3 {
-		t.Errorf("rain = severity %d station %d fresh %d known %v, want warning from 12 of 3",
-			got.Severity, got.Station.ID, got.FreshGauges, got.Known)
+	if !got.Known || got.Severity != SeverityWarning || got.Station.ID != 12 || got.FreshGauges != 3 || got.RainWindow != time.Hour {
+		t.Errorf("rain = severity %d station %d fresh %d known %v window %v, want warning from 12 of 3 over 1h",
+			got.Severity, got.Station.ID, got.FreshGauges, got.Known, got.RainWindow)
+	}
+}
+
+// Seen on 26 September 2026: 124 mm over the day but 0.5 mm in the last hour.
+// The severity is right, but it must be attributed to the day, not the hour.
+func TestRainWindowNamesWhatSetTheSeverity(t *testing.T) {
+	f := newFixture().rain(north(11, source.KindRain, 1, nil), RainPoint{At: now, Rain1h: mm(0.5), Rain3h: mm(6.5), Rain24h: mm(124)})
+	got := find(t, Assess(f.snap, home, nil), 0, RuleRain)
+	if got.Severity != SeverityWatch || got.RainWindow != 24*time.Hour {
+		t.Errorf("rain = severity %d window %v, want watch over 24h", got.Severity, got.RainWindow)
+	}
+
+	// With 1 h and 24 h totals at the same level, the shorter window is the more
+	// current reason and names the alert.
+	f = newFixture().rain(north(11, source.KindRain, 1, nil), RainPoint{At: now, Rain1h: mm(25), Rain24h: mm(95)})
+	if got := find(t, Assess(f.snap, home, nil), 0, RuleRain); got.RainWindow != time.Hour {
+		t.Errorf("tied windows = %v, want 1h", got.RainWindow)
 	}
 }
 

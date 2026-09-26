@@ -143,6 +143,8 @@ type Finding struct {
 	LevelMSL, BankMSL       float64
 	RiseCmPerHour           *float64
 	Rain1h, Rain3h, Rain24h *float64
+	// For rain, the window whose total set the severity; 0 when none did.
+	RainWindow time.Duration
 	// For area rules, how many watched gauges had fresh readings.
 	FreshGauges int
 }
@@ -332,22 +334,40 @@ func assessRain(snap Snapshot, sub Subscription, gauges []nearby, current map[Ke
 	rain.Severity = hysteresis(worstRaw, relaxed, current[rain.Key])
 	rain.Station, rain.DistanceM, rain.At = worst.Station, worst.DistanceM, worstPoint.At
 	rain.Rain1h, rain.Rain3h, rain.Rain24h = worstPoint.Rain1h, worstPoint.Rain3h, worstPoint.Rain24h
+	if _, rain.RainWindow = rainDriver(worstPoint, 1); rain.RainWindow == 0 {
+		_, rain.RainWindow = rainDriver(worstPoint, rainHysteresis)
+	}
 	return []Finding{rain, stale}
 }
 
-// rainLevel is the worst severity across the windows a gauge reports. A factor
-// below 1 relaxes every threshold, for judging whether a severity may drop.
 func rainLevel(p RainPoint, factor float64) int {
-	level := SeverityNone
+	level, _ := rainDriver(p, factor)
+	return level
+}
+
+// rainDriver is the worst severity across the windows a gauge reports, and the
+// shortest window that reaches it, since "heavy rain" means something quite
+// different over one hour than over a day. A factor below 1 relaxes every
+// threshold, for judging whether a severity may drop.
+func rainDriver(p RainPoint, factor float64) (int, time.Duration) {
+	level, window := SeverityNone, time.Duration(0)
 	for _, w := range []struct {
 		mm         *float64
+		window     time.Duration
 		thresholds []float64
-	}{{p.Rain1h, rain1hThresholds}, {p.Rain3h, rain3hThresholds}, {p.Rain24h, rain24hThresholds}} {
-		if w.mm != nil {
-			level = max(level, levelOf(*w.mm/factor, w.thresholds))
+	}{
+		{p.Rain1h, time.Hour, rain1hThresholds},
+		{p.Rain3h, 3 * time.Hour, rain3hThresholds},
+		{p.Rain24h, 24 * time.Hour, rain24hThresholds},
+	} {
+		if w.mm == nil {
+			continue
+		}
+		if l := levelOf(*w.mm/factor, w.thresholds); l > level {
+			level, window = l, w.window
 		}
 	}
-	return level
+	return level, window
 }
 
 func wetter(a, b RainPoint) bool {

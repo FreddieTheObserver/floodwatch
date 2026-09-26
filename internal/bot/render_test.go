@@ -78,7 +78,7 @@ func TestStatusText(t *testing.T) {
 	for _, want := range []string{
 		"📍 <b>Home</b>",
 		"🟢 Chao Phraya 15 (5.4 km): 1.82 m below the bank at 13:30",
-		"🟡 Heavy rain: 0.5 mm in 1 h, 124 mm in 24 h at Krung Thep 3 (4.9 km), 13:30",
+		"🟡 Heavy rain over the last 24 hours: 0.5 mm in 1 h, 124 mm in 24 h at Krung Thep 3 (4.9 km), 13:30",
 		"Wettest of 7 gauges reporting nearby.",
 		"checked 14:20",
 	} {

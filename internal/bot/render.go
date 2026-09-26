@@ -72,6 +72,24 @@ func riseText(rate *float64) string {
 	}
 }
 
+// rainTitle names the window behind a rain severity, so a day's total is not
+// mistaken for rain falling now.
+func rainTitle(f alert.Finding) string {
+	title := rainTitles[f.Severity]
+	if f.Severity == alert.SeverityNone {
+		return title
+	}
+	switch f.RainWindow {
+	case time.Hour:
+		return title + " in the last hour"
+	case 3 * time.Hour:
+		return title + " in the last 3 hours"
+	case 24 * time.Hour:
+		return title + " over the last 24 hours"
+	}
+	return title
+}
+
 func rainAmounts(f alert.Finding) string {
 	var parts []string
 	for _, w := range []struct {
@@ -152,7 +170,7 @@ func changeText(c alert.Change) string {
 		if c.Severity == alert.SeverityNone {
 			return fmt.Sprintf("%s <b>Rain has eased</b>. Wettest gauge now: %s at %s.", clearIcon, rainAmounts(c.Finding), where(c.Finding))
 		}
-		title := rainTitles[c.Severity]
+		title := rainTitle(c.Finding)
 		if easing {
 			title = "Rain easing, now " + strings.ToLower(title)
 		}
@@ -249,7 +267,7 @@ func statusText(sub alert.Subscription, findings []alert.Finding, checked time.T
 	b.WriteString("\n<b>Rain</b>\n")
 	switch {
 	case rain.Known:
-		fmt.Fprintf(&b, "%s %s: %s at %s, %s\n", severityIcons[rain.Severity], rainTitles[rain.Severity],
+		fmt.Fprintf(&b, "%s %s: %s at %s, %s\n", severityIcons[rain.Severity], rainTitle(rain),
 			rainAmounts(rain), where(rain), clock(rain.At))
 		fmt.Fprintf(&b, "Wettest of %d gauges reporting nearby.\n", rain.FreshGauges)
 	case rainStale.Known:
