@@ -57,3 +57,21 @@ DELETE FROM subscriptions
 DELETE FROM subscriptions
  WHERE channel = sqlc.arg('channel')
    AND recipient = sqlc.arg('recipient');
+
+-- name: GetRecipientLanguage :one
+SELECT language
+  FROM recipients
+ WHERE channel = sqlc.arg('channel')
+   AND recipient = sqlc.arg('recipient');
+
+-- name: UpsertRecipientLanguage :exec
+INSERT INTO recipients (channel, recipient, language)
+VALUES (sqlc.arg('channel'), sqlc.arg('recipient'), sqlc.arg('language'))
+ON CONFLICT (channel, recipient) DO UPDATE
+   SET language   = EXCLUDED.language,
+       updated_at = now();
+
+-- name: DeleteRecipientPreferences :exec
+DELETE FROM recipients
+ WHERE channel = sqlc.arg('channel')
+   AND recipient = sqlc.arg('recipient');

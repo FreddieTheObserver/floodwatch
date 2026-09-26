@@ -103,8 +103,30 @@ func (s *Store) RemoveSubscription(ctx context.Context, channel, recipient, labe
 	return n > 0, err
 }
 
-// ForgetRecipient deletes every place of one subscriber, and with them all
-// alert history, which is everything stored about that person.
+// ForgetRecipient deletes every place of one subscriber, with them all alert
+// history, and their preferences: everything stored about that person.
 func (s *Store) ForgetRecipient(ctx context.Context, channel, recipient string) (int64, error) {
-	return s.DeleteRecipient(ctx, gen.DeleteRecipientParams{Channel: channel, Recipient: recipient})
+	var n int64
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.WithTx(tx)
+		var err error
+		if n, err = q.DeleteRecipient(ctx, gen.DeleteRecipientParams{Channel: channel, Recipient: recipient}); err != nil {
+			return err
+		}
+		return q.DeleteRecipientPreferences(ctx, gen.DeleteRecipientPreferencesParams{Channel: channel, Recipient: recipient})
+	})
+	return n, err
+}
+
+// RecipientLanguage is a person's chosen language, or "" if they have none.
+func (s *Store) RecipientLanguage(ctx context.Context, channel, recipient string) (string, error) {
+	lang, err := s.GetRecipientLanguage(ctx, gen.GetRecipientLanguageParams{Channel: channel, Recipient: recipient})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return lang, err
+}
+
+func (s *Store) SetRecipientLanguage(ctx context.Context, channel, recipient, language string) error {
+	return s.UpsertRecipientLanguage(ctx, gen.UpsertRecipientLanguageParams{Channel: channel, Recipient: recipient, Language: language})
 }

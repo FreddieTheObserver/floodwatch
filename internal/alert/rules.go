@@ -99,6 +99,7 @@ type Station struct {
 	Agency   string
 	Kind     source.Kind
 	Name     string
+	NameTH   string // the station's Thai name, when the source gives one
 	District string
 	Lat, Lng float64
 	BankMSL  *float64

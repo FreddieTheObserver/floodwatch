@@ -54,7 +54,7 @@ func TestReadingsForAlerts(t *testing.T) {
 		switch st.Kind {
 		case source.KindWater:
 			waterID = st.ID
-			if st.BankMSL == nil || *st.BankMSL != 2.2 || st.District != "Bang Khen District" {
+			if st.BankMSL == nil || *st.BankMSL != 2.2 || st.District != "Bang Khen District" || st.NameTH != "คลองลาดพร้าว วัดบางบัว" {
 				t.Errorf("water station = %+v", st)
 			}
 		case source.KindRain:
@@ -231,12 +231,13 @@ func TestForgetRecipient(t *testing.T) {
 	s.SaveSubscription(ctx, place("42", "office"))
 	s.SaveSubscription(ctx, place("43", "home"))
 	s.RecordAlertStates(ctx, map[alert.Key]int{{SubscriptionID: a.ID, Rule: alert.RuleRain}: 1}, true)
+	s.SetRecipientLanguage(ctx, "telegram", "42", "th")
 
 	n, err := s.ForgetRecipient(ctx, "telegram", "42")
 	if err != nil || n != 2 {
 		t.Errorf("forgot %d places, %v", n, err)
 	}
-	if countRows(t, s, "subscriptions") != 1 || countRows(t, s, "alert_states") != 0 {
+	if countRows(t, s, "subscriptions") != 1 || countRows(t, s, "alert_states") != 0 || countRows(t, s, "recipients") != 0 {
 		t.Error("forgetting a recipient left their data behind")
 	}
 
@@ -246,5 +247,25 @@ func TestForgetRecipient(t *testing.T) {
 	}
 	if removed, _ := s.RemoveSubscription(ctx, "telegram", "43", "home"); removed {
 		t.Error("removing a missing place reported success")
+	}
+}
+
+func TestRecipientLanguage(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+
+	if lang, err := s.RecipientLanguage(ctx, "telegram", "42"); lang != "" || err != nil {
+		t.Errorf("no preference = %q, %v; want empty", lang, err)
+	}
+	for _, want := range []string{"th", "en"} {
+		if err := s.SetRecipientLanguage(ctx, "telegram", "42", want); err != nil {
+			t.Fatal(err)
+		}
+		if lang, _ := s.RecipientLanguage(ctx, "telegram", "42"); lang != want {
+			t.Errorf("language = %q, want %q", lang, want)
+		}
+	}
+	if err := s.SetRecipientLanguage(ctx, "telegram", "42", "fr"); err == nil {
+		t.Error("an unsupported language was stored")
 	}
 }

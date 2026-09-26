@@ -1,5 +1,5 @@
 -- name: ListStationsForAlerts :many
-SELECT id, source, kind, name, district, lat, lng, bank_msl, agency
+SELECT id, source, kind, name, name_th, district, lat, lng, bank_msl, agency
   FROM stations
  ORDER BY id;
 

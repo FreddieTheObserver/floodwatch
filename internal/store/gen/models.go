@@ -26,6 +26,13 @@ type RainReading struct {
 	FetchedAt  time.Time
 }
 
+type Recipient struct {
+	Channel   string
+	Recipient string
+	Language  string
+	UpdatedAt time.Time
+}
+
 type Station struct {
 	ID          int64
 	Source      string

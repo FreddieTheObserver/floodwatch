@@ -47,6 +47,22 @@ func (q *Queries) DeleteRecipient(ctx context.Context, arg DeleteRecipientParams
 	return result.RowsAffected(), nil
 }
 
+const deleteRecipientPreferences = `-- name: DeleteRecipientPreferences :exec
+DELETE FROM recipients
+ WHERE channel = $1
+   AND recipient = $2
+`
+
+type DeleteRecipientPreferencesParams struct {
+	Channel   string
+	Recipient string
+}
+
+func (q *Queries) DeleteRecipientPreferences(ctx context.Context, arg DeleteRecipientPreferencesParams) error {
+	_, err := q.db.Exec(ctx, deleteRecipientPreferences, arg.Channel, arg.Recipient)
+	return err
+}
+
 const deleteRecipientSubscription = `-- name: DeleteRecipientSubscription :execrows
 DELETE FROM subscriptions
  WHERE channel = $1
@@ -66,6 +82,25 @@ func (q *Queries) DeleteRecipientSubscription(ctx context.Context, arg DeleteRec
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getRecipientLanguage = `-- name: GetRecipientLanguage :one
+SELECT language
+  FROM recipients
+ WHERE channel = $1
+   AND recipient = $2
+`
+
+type GetRecipientLanguageParams struct {
+	Channel   string
+	Recipient string
+}
+
+func (q *Queries) GetRecipientLanguage(ctx context.Context, arg GetRecipientLanguageParams) (string, error) {
+	row := q.db.QueryRow(ctx, getRecipientLanguage, arg.Channel, arg.Recipient)
+	var language string
+	err := row.Scan(&language)
+	return language, err
 }
 
 const getRecipientSubscription = `-- name: GetRecipientSubscription :one
@@ -224,6 +259,25 @@ DELETE FROM alert_states
 
 func (q *Queries) ResetAlertStates(ctx context.Context, subscriptionID int64) error {
 	_, err := q.db.Exec(ctx, resetAlertStates, subscriptionID)
+	return err
+}
+
+const upsertRecipientLanguage = `-- name: UpsertRecipientLanguage :exec
+INSERT INTO recipients (channel, recipient, language)
+VALUES ($1, $2, $3)
+ON CONFLICT (channel, recipient) DO UPDATE
+   SET language   = EXCLUDED.language,
+       updated_at = now()
+`
+
+type UpsertRecipientLanguageParams struct {
+	Channel   string
+	Recipient string
+	Language  string
+}
+
+func (q *Queries) UpsertRecipientLanguage(ctx context.Context, arg UpsertRecipientLanguageParams) error {
+	_, err := q.db.Exec(ctx, upsertRecipientLanguage, arg.Channel, arg.Recipient, arg.Language)
 	return err
 }
 
