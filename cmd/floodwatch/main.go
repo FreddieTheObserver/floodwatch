@@ -9,12 +9,18 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/FreddieTheObserver/floodwatch/internal/alert"
+	"github.com/FreddieTheObserver/floodwatch/internal/bot"
 	"github.com/FreddieTheObserver/floodwatch/internal/collect"
 	"github.com/FreddieTheObserver/floodwatch/internal/config"
 	"github.com/FreddieTheObserver/floodwatch/internal/obs"
 	"github.com/FreddieTheObserver/floodwatch/internal/source"
 	"github.com/FreddieTheObserver/floodwatch/internal/store"
+	"github.com/FreddieTheObserver/floodwatch/internal/telegram"
 )
 
 func main() {
@@ -56,10 +62,31 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	for _, p := range cfg.Provinces {
 		fetchers = append(fetchers, source.ThaiWaterLevels(client, p), source.ThaiWaterRain(client, p))
 	}
+	collector := collect.New(fetchers, st, log, cfg.PollInterval, cfg.FetchTimeout)
 
 	log.Info("floodwatch starting", "sources", len(fetchers), "bma_rain", cfg.BMARain,
-		"poll_interval", cfg.PollInterval.String())
-	collect.New(fetchers, st, log, cfg.PollInterval, cfg.FetchTimeout).Run(ctx)
+		"poll_interval", cfg.PollInterval.String(), "telegram", cfg.TelegramToken != "")
+
+	g, ctx := errgroup.WithContext(ctx)
+	var afterPoll func(context.Context)
+	if cfg.TelegramToken != "" {
+		// Past the bot's 50 s long poll, so only a request that has truly hung
+		// is cut off, and a stuck send cannot stall the collector for ever.
+		tg := telegram.New(cfg.TelegramToken, &http.Client{Timeout: 90 * time.Second})
+		b := bot.New(tg, st, alert.NewEvaluator(st), log)
+		afterPoll = b.Notify
+		// A rejected token ends the whole process: collecting without ever
+		// alerting would look healthy while doing nothing useful.
+		g.Go(func() error { return b.Run(ctx) })
+	} else {
+		log.Warn("FLOODWATCH_TELEGRAM_TOKEN is not set; collecting without the bot")
+	}
+	g.Go(func() error {
+		collector.Run(ctx, afterPoll)
+		return nil
+	})
+
+	err = g.Wait()
 	log.Info("floodwatch stopped")
-	return nil
+	return err
 }

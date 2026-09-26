@@ -108,11 +108,31 @@ func TestBackoffResetsAfterSuccess(t *testing.T) {
 	}
 }
 
+func TestRunCallsAfterPollOnceReadingsAreSaved(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	saver := &fakeSaver{}
+	fetchers := []source.Fetcher{fakeFetcher{name: "a", b: source.Batch{Source: "a", Stations: []source.Station{{ExternalID: "1"}}}}}
+
+	evaluated := make(chan int, 1)
+	go New(fetchers, saver, quiet(), time.Hour, time.Second).Run(ctx, func(context.Context) {
+		evaluated <- len(saver.saved)
+	})
+	select {
+	case n := <-evaluated:
+		if n != 1 {
+			t.Errorf("afterPoll ran with %d batches saved, want the poll finished first", n)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("afterPoll was not called after the first poll")
+	}
+}
+
 func TestRunStopsWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		New(nil, &fakeSaver{}, quiet(), time.Hour, time.Second).Run(ctx)
+		New(nil, &fakeSaver{}, quiet(), time.Hour, time.Second).Run(ctx, nil)
 		close(done)
 	}()
 	cancel()

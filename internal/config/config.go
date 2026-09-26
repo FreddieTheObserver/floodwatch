@@ -18,6 +18,8 @@ type Config struct {
 	FetchTimeout time.Duration
 	Provinces    []string
 	BMARain      bool
+	// Empty runs the collector alone, without the bot or alerts.
+	TelegramToken string
 }
 
 const (
@@ -45,7 +47,8 @@ func Load(getenv func(string) string) (Config, error) {
 		Provinces:    l.provinces("FLOODWATCH_PROVINCES", DefaultProvinces),
 		// Off until the BMA Drainage Department permits automated access to its
 		// rain gauges; permission was requested on 2026-09-26.
-		BMARain: l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
+		BMARain:       l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
+		TelegramToken: l.text("FLOODWATCH_TELEGRAM_TOKEN", ""),
 	}
 	if cfg.DSN == "" {
 		l.errs = append(l.errs, errors.New("FLOODWATCH_DSN is required"))

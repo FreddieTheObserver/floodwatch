@@ -5,7 +5,11 @@ STATICCHECK := go run honnef.co/go/tools/cmd/staticcheck@v0.8.1
 
 export FLOODWATCH_DSN ?= postgres://floodwatch:floodwatch@localhost:5433/floodwatch?sslmode=disable
 
-.PHONY: all build test vet lint sqlc sqlc-diff check db-up db-down psql run clean
+# Secrets such as the bot token live in an untracked .env, loaded only by the
+# targets that start the service.
+LOAD_ENV := if [ -f .env ]; then set -a; . ./.env; set +a; fi;
+
+.PHONY: all build test vet lint sqlc sqlc-diff check db-up db-down psql run serve clean
 
 all: check build
 
@@ -39,7 +43,11 @@ psql:
 	docker compose exec postgres psql -U floodwatch -d floodwatch
 
 run:
-	go run ./cmd/floodwatch
+	@$(LOAD_ENV) go run ./cmd/floodwatch
+
+# The built binary, as the long-running service uses it.
+serve: build
+	@$(LOAD_ENV) exec ./bin/floodwatch
 
 clean:
 	rm -rf bin

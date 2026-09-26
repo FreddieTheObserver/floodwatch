@@ -41,10 +41,17 @@ func New(fetchers []source.Fetcher, saver Saver, log *slog.Logger, interval, fet
 	return c
 }
 
-// Run polls once straight away, then on every tick until ctx is done. A tick
-// that comes due while a poll is still running is dropped, not queued.
-func (c *Collector) Run(ctx context.Context) {
-	c.Poll(ctx)
+// Run polls once straight away, then on every tick until ctx is done, calling
+// afterPoll (if not nil) once each poll's readings are saved. A tick that comes
+// due while a poll is still running is dropped, not queued.
+func (c *Collector) Run(ctx context.Context, afterPoll func(context.Context)) {
+	poll := func() {
+		c.Poll(ctx)
+		if afterPoll != nil && ctx.Err() == nil {
+			afterPoll(ctx)
+		}
+	}
+	poll()
 	t := time.NewTicker(c.interval)
 	defer t.Stop()
 	for {
@@ -52,7 +59,7 @@ func (c *Collector) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			c.Poll(ctx)
+			poll()
 		}
 	}
 }
