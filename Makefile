@@ -9,7 +9,7 @@ export FLOODWATCH_DSN ?= postgres://floodwatch:floodwatch@localhost:5433/floodwa
 # targets that start the service.
 LOAD_ENV := if [ -f .env ]; then set -a; . ./.env; set +a; fi;
 
-.PHONY: all build test vet lint sqlc sqlc-diff check db-up db-down psql run serve clean
+.PHONY: all build test vet lint sqlc sqlc-diff check db-up db-down psql run serve up down clean
 
 all: check build
 
@@ -48,6 +48,20 @@ run:
 # The built binary, as the long-running service uses it.
 serve: build
 	@$(LOAD_ENV) exec ./bin/floodwatch
+
+# Runs the service detached in a tmux session, restarting it ten seconds after
+# it exits for any reason, with its output appended to floodwatch.log. Pressing
+# Ctrl-C inside the session therefore restarts it; make down stops it.
+up: build
+	@if tmux has-session -t floodwatch 2>/dev/null; then \
+		echo "already running; watch it with: tmux attach -t floodwatch"; \
+	else \
+		tmux new-session -d -s floodwatch 'while true; do make serve 2>&1 | tee -a floodwatch.log; echo "floodwatch exited; restarting in 10 s" | tee -a floodwatch.log; sleep 10; done' && \
+		echo "started; watch it with: tmux attach -t floodwatch"; \
+	fi
+
+down:
+	@tmux kill-session -t floodwatch 2>/dev/null && echo stopped || echo "not running"
 
 clean:
 	rm -rf bin

@@ -3,6 +3,9 @@
 services:
   postgres:
     image: postgres:18
+    # The bot runs unattended; the database must come back after a crash or
+    # a Docker restart without anyone there to start it.
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-floodwatch}
       POSTGRES_USER: ${POSTGRES_USER:-floodwatch}
