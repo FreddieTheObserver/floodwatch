@@ -64,22 +64,40 @@ func Load(getenv func(string) string) (Config, error) {
 		TideStations: l.codes("FLOODWATCH_TIDE_STATIONS", DefaultTideStations, tideCode, "HII tide station codes such as N02"),
 		// Off until the BMA Drainage Department permits automated access to its
 		// rain gauges; permission was requested on 2026-09-26.
-		BMARain:           l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
-		TelegramToken:     l.text("FLOODWATCH_TELEGRAM_TOKEN", ""),
-		HealthcheckURL:    l.text("FLOODWATCH_HEALTHCHECK_URL", ""),
-		HealthcheckAPIKey: l.text("FLOODWATCH_HEALTHCHECK_API_KEY", ""),
+		BMARain:       l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
+		TelegramToken: l.text("FLOODWATCH_TELEGRAM_TOKEN", ""),
 	}
+	w := l.watchdog()
+	cfg.HealthcheckURL, cfg.HealthcheckAPIKey = w.URL, w.APIKey
 	if cfg.DSN == "" {
 		l.errs = append(l.errs, errors.New("FLOODWATCH_DSN is required"))
 	}
+	return cfg, errors.Join(l.errs...)
+}
+
+// Watchdog is the outside watchdog's part of the configuration, which pausing
+// the watchdog needs without the rest.
+type Watchdog struct {
+	URL    string
+	APIKey string
+}
+
+func LoadWatchdog(getenv func(string) string) (Watchdog, error) {
+	l := loader{getenv: getenv}
+	w := l.watchdog()
+	return w, errors.Join(l.errs...)
+}
+
+func (l *loader) watchdog() Watchdog {
+	w := Watchdog{URL: l.text("FLOODWATCH_HEALTHCHECK_URL", ""), APIKey: l.text("FLOODWATCH_HEALTHCHECK_API_KEY", "")}
 	// The value is not echoed back, as anyone holding it can forge pings.
-	if u, err := url.Parse(cfg.HealthcheckURL); cfg.HealthcheckURL != "" && (err != nil || u.Scheme != "https" || u.Host == "") {
+	if u, err := url.Parse(w.URL); w.URL != "" && (err != nil || u.Scheme != "https" || u.Host == "") {
 		l.errs = append(l.errs, errors.New("FLOODWATCH_HEALTHCHECK_URL must be an https URL"))
 	}
-	if cfg.HealthcheckAPIKey != "" && cfg.HealthcheckURL == "" {
+	if w.APIKey != "" && w.URL == "" {
 		l.errs = append(l.errs, errors.New("FLOODWATCH_HEALTHCHECK_API_KEY is set without FLOODWATCH_HEALTHCHECK_URL, the check it would pause"))
 	}
-	return cfg, errors.Join(l.errs...)
+	return w
 }
 
 type loader struct {

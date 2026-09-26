@@ -109,3 +109,16 @@ func TestHealthcheckAPIKey(t *testing.T) {
 		t.Errorf("error leaks the key: %v", err)
 	}
 }
+
+// Pausing the watchdog must work outside the Makefile, which is what sets
+// the database for everything else.
+func TestTheWatchdogLoadsOnItsOwn(t *testing.T) {
+	const ping, key = "https://hc-ping.com/0a1b2c3d-secret", "rw-key-not-for-logs"
+	w, err := LoadWatchdog(env(map[string]string{"FLOODWATCH_HEALTHCHECK_URL": ping, "FLOODWATCH_HEALTHCHECK_API_KEY": key}))
+	if err != nil || w.URL != ping || w.APIKey != key {
+		t.Errorf("watchdog = %+v, %v", w, err)
+	}
+	if _, err := LoadWatchdog(env(map[string]string{"FLOODWATCH_HEALTHCHECK_URL": "http://hc-ping.com/x"})); err == nil {
+		t.Error("plain http accepted")
+	}
+}

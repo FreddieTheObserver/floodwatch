@@ -42,7 +42,7 @@ func pause(ctx context.Context, client *http.Client, base, pingURL, apiKey strin
 	case http.StatusOK:
 		return nil
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return fmt.Errorf("pause the watchdog: status %d; the API key must be a read-write key of the check's project", resp.StatusCode)
+		return fmt.Errorf("pause the watchdog: healthchecks.io refused the API key (status %d); it must be a current read-write key of the check's project", resp.StatusCode)
 	default:
 		return fmt.Errorf("pause the watchdog: status %d", resp.StatusCode)
 	}

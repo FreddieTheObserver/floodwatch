@@ -56,18 +56,18 @@ func main() {
 // pauseWatchdog is for stopping floodwatch on purpose: it pauses the outside
 // watchdog, which the service's next report after starting rearms.
 func pauseWatchdog(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
-	cfg, err := config.Load(getenv)
+	w, err := config.LoadWatchdog(getenv)
 	if err != nil {
 		return err
 	}
 	switch {
-	case cfg.HealthcheckURL == "":
+	case w.URL == "":
 		fmt.Fprintln(stdout, "no watchdog is set up, so there is nothing to pause")
 		return nil
-	case cfg.HealthcheckAPIKey == "":
+	case w.APIKey == "":
 		return errors.New("FLOODWATCH_HEALTHCHECK_API_KEY is not set, so the watchdog cannot be paused")
 	}
-	if err := health.Pause(ctx, &http.Client{Timeout: 10 * time.Second}, cfg.HealthcheckURL, cfg.HealthcheckAPIKey); err != nil {
+	if err := health.Pause(ctx, &http.Client{Timeout: 10 * time.Second}, w.URL, w.APIKey); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "watchdog paused until floodwatch runs again")
