@@ -52,10 +52,21 @@ The collector identifies itself in its User-Agent, polls sources one at a time, 
 
 Requirements: Go 1.26 and Docker.
 
+Create a bot with [@BotFather](https://t.me/BotFather), then store its token in an untracked `.env` without it reaching the screen or your shell history:
+
 ```sh
-make db-up                      # Postgres 18 on localhost:5433
-make run                        # applies migrations, then starts collecting
+read -rsp 'Token: ' t && printf 'FLOODWATCH_TELEGRAM_TOKEN=%s\n' "$t" > .env && chmod 600 .env && unset t
 ```
+
+```sh
+make db-up    # Postgres 18 on localhost:5433
+make serve    # builds, applies migrations, then runs the collector and the bot
+```
+
+`make run` does the same through `go run`.
+Both load `.env` if it exists.
+Without a token the collector still runs, just without the bot.
+A token Telegram rejects stops the whole process, since collecting without ever alerting would look healthy while helping nobody.
 
 Configuration is read from the environment:
 
@@ -66,7 +77,25 @@ Configuration is read from the environment:
 | `FLOODWATCH_FETCH_TIMEOUT` | `30s` | limit for one source's request |
 | `FLOODWATCH_PROVINCES` | `10,11,12,13,73,74` | ThaiWater province codes to collect |
 | `FLOODWATCH_BMA_RAIN_ENABLED` | `false` | poll the BMA rain gauges |
+| `FLOODWATCH_TELEGRAM_TOKEN` | none | bot token from @BotFather; keep it in `.env` |
 | `FLOODWATCH_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
+
+## Using the bot
+
+Send the bot a location, or paste coordinates such as `13.6515, 100.4945` from a map app on a computer.
+Your first place is called Home; later locations ask whether to move a place there or add a new one, up to five.
+Each new place gets a status message straight away, and after that the bot only writes when something changes.
+
+| Command | What it does |
+| --- | --- |
+| `/status` | current water levels and rain around each of your places |
+| `/places` | list your places, with buttons to remove them |
+| `/stop` | delete your places and stop all alerts, after a confirmation |
+| `/help` | how the bot works |
+
+The bot stores only your chat ID and the coordinates you send.
+If you block it, it deletes them on its next attempt to message you.
+It ignores group chats, where alerts would expose every member's places.
 
 ## Development
 
@@ -83,5 +112,7 @@ Store tests start their own Postgres with testcontainers, so they need Docker bu
 | `internal/source` | fetch and normalise each feed; fixtures in `testdata` are trimmed real responses |
 | `internal/collect` | poll loop, per-source isolation and backoff |
 | `internal/alert` | pure rules and the evaluator |
+| `internal/bot` | Telegram sign-up, commands, message rendering and alert delivery |
+| `internal/telegram` | minimal Bot API client that keeps the token out of errors and logs |
 | `internal/store` | Postgres access through sqlc, with embedded goose migrations |
 | `internal/config` | environment configuration |
