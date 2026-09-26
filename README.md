@@ -25,12 +25,15 @@ An alert is recorded as sent only after Telegram accepts the message, so a faile
 | Rule | Judged per | Severity |
 | --- | --- | --- |
 | Water level | water gauge | watch within 50 cm of the bank, warning within 20 cm, overflow at or above it |
-| Water rising | water gauge | rising at least 5 cm/h and on course to reach the bank within 3 hours |
+| Water rising | water gauge | already within 50 cm of the bank, rising at least 5 cm/h, and on course to reach it within 3 hours |
 | Rain | place | worst nearby gauge: 20/40/60 mm in 1 h, 40/70/100 mm in 3 h, or 90/150/250 mm in 24 h |
 | Data gone quiet | gauge or place | no fresh reading for 3 hours |
 
 The 60 mm/h line is roughly the drainage capacity commonly cited for Bangkok.
 The 90 mm/24 h line is where the Thai Meteorological Department's "very heavy rain" class begins.
+
+Gates near the river mouth rise 20 to 30 cm/h on every flood tide while far below their banks, which is why a fast rise only counts once the water is already close.
+Rain alerts name the window that set them, so a day's total is not mistaken for rain falling now.
 
 A severity rises at once but only falls once the reading is clearly past the threshold (5 cm for water, 20% for rain), so a reading hovering on a line does not alert every poll.
 A gauge with no fresh data never produces an "all clear"; the last thing its subscriber was told stands until real data says otherwise.
