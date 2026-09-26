@@ -28,15 +28,15 @@ An alert is recorded as sent only after Telegram accepts the message, so a faile
 | 🟡 WATCH | something is raised | keep an eye on it and check the flooded roads map |
 | 🟠 WARNING | water near the bank, rising fast, or very heavy rain | move the car to higher ground and valuables off the floor |
 | 🔴 HIGH | water over the bank nearby, or rain beyond drainage capacity | stay off flooded roads and follow official BMA instructions |
-| ⚪ UNKNOWN | no gauge nearby has fresh data | check official BMA updates |
+| ⚪ NO DATA | no gauge nearby has fresh data | check official BMA updates |
 
 The risk is the worst of the place's water gauges and its rain, judged by the rules below.
-A gauge beyond the place's radius counts one level lower, since a canal overflowing 7 km away is a warning for the place, not a certainty, and the reason given always names the distance.
-Water rising fast near its bank counts one level higher, since it is about to get worse.
+A gauge beyond the place's radius counts one level lower, since a canal overflowing 7 km away is a warning for the place, not a certainty; messages label it regional and give its distance.
+Water rising fast near its bank counts one level higher, since it is about to get worse, and distance is discounted after that, so a distant rise cannot win back its level.
 The trend reads getting worse if anything behind the risk is worsening, improving if everything behind it is easing, and steady otherwise.
 
 When gauges go quiet, their last judged levels hold until fresh data replaces them, so an outage never produces an all clear.
-The risk reads UNKNOWN only when nothing nearby is reporting and nothing was raised before.
+The risk reads NO DATA only when nothing nearby is reporting and nothing was raised before.
 
 ## Gauge rules
 
@@ -107,7 +107,9 @@ Send the bot a location, or paste coordinates such as `13.6515, 100.4945` from a
 Your first place is called Home; later locations ask whether to move a place there or add a new one, up to five.
 A new place starts as Place 2, Place 3 and so on, and the bot asks straight away what to call it; any place can be renamed later from `/places`.
 Each new place gets a status message straight away, and after that the bot only writes when the place's overall risk changes.
-A status shows the risk, its trend, the reason and what to do, then every reading behind it, with how old each one is, in a collapsed Details section.
+Every status and alert has the same shape, whatever the risk: the risk and its trend, what is happening, a short list of what to do, the flooded roads map, then a collapsed Details section, and finally the check time and disclaimer.
+What is happening states measurements against FloodWatch's thresholds, for example 96.5 mm over the last 24 hours against the 90 mm line, instead of labelling them.
+Details hold only measurements, each with how old it is, plus what moved the trend and who runs each gauge; the verdict appears only above them.
 Its Show gauges on map button sends the place and its nearest gauges as map pins that open in the phone's own maps app.
 Status messages, and alerts about a raised risk, link to the BMA's [flooded roads map](https://now.bangkok.go.th/flood-alert.html), since a canal gauge kilometres away cannot say whether your street is under water.
 
