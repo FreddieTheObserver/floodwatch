@@ -158,6 +158,30 @@ func TestSaveSubscription(t *testing.T) {
 	}
 }
 
+func TestRenameSubscription(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+	home, _ := s.SaveSubscription(ctx, place("42", "Home"))
+	s.SaveSubscription(ctx, place("42", "Place 2"))
+	area := alert.Key{SubscriptionID: home.ID, Rule: alert.RuleRain}
+	if err := s.RecordAlertStates(ctx, map[alert.Key]int{area: 2}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if ok, err := s.RenameSubscription(ctx, "telegram", "42", "Home", "บ้าน"); !ok || err != nil {
+		t.Fatalf("rename = %v, %v", ok, err)
+	}
+	if states, _ := s.AlertStates(ctx); states[area] != 2 {
+		t.Errorf("renaming lost the alert history: %v", states)
+	}
+	if _, err := s.RenameSubscription(ctx, "telegram", "42", "Place 2", "บ้าน"); !errors.Is(err, ErrLabelTaken) {
+		t.Errorf("taking a used name: %v, want ErrLabelTaken", err)
+	}
+	if ok, err := s.RenameSubscription(ctx, "telegram", "43", "Place 2", "Office"); ok || err != nil {
+		t.Errorf("renaming another person's place = %v, %v", ok, err)
+	}
+}
+
 func TestMovingAPlaceForgetsItsAlerts(t *testing.T) {
 	s := newTestStore(t)
 	ctx := t.Context()

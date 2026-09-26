@@ -36,6 +36,13 @@ ON CONFLICT (channel, recipient, label) DO UPDATE
        radius_m = EXCLUDED.radius_m
 RETURNING id, channel, recipient, label, lat, lng, radius_m, created_at;
 
+-- name: RenameRecipientSubscription :execrows
+UPDATE subscriptions
+   SET label = sqlc.arg('new_label')
+ WHERE channel = sqlc.arg('channel')
+   AND recipient = sqlc.arg('recipient')
+   AND label = sqlc.arg('old_label');
+
 -- name: ResetAlertStates :exec
 DELETE FROM alert_states
  WHERE subscription_id = sqlc.arg('subscription_id');

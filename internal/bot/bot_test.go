@@ -3,8 +3,10 @@ package bot
 import (
 	"context"
 	"errors"
+	"html"
 	"io"
 	"log/slog"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +83,21 @@ func (s *fakeStore) RecipientSubscriptions(_ context.Context, _, rcpt string) ([
 		}
 	}
 	return out, nil
+}
+
+func (s *fakeStore) RenameSubscription(_ context.Context, _, rcpt, from, to string) (bool, error) {
+	for _, x := range s.subs {
+		if x.Recipient == rcpt && x.Label == to {
+			return false, store.ErrLabelTaken
+		}
+	}
+	for i, x := range s.subs {
+		if x.Recipient == rcpt && x.Label == from {
+			s.subs[i].Label = to
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *fakeStore) RemoveSubscription(_ context.Context, _, rcpt, label string) (bool, error) {
@@ -234,7 +251,7 @@ func TestAnotherLocationAsksFirst(t *testing.T) {
 		t.Fatalf("a second location was saved without asking: %+v", h.store.subs)
 	}
 	got := buttons(t, h.api.last(t))
-	want := []string{"mv:Home:13.70000,100.49000", "add:13.70000,100.49000"}
+	want := []string{"mv:1:13.70000,100.49000", "add:13.70000,100.49000"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("buttons = %v, want %v", got, want)
 	}
@@ -249,7 +266,7 @@ func TestAddMoveAndRemoveButtons(t *testing.T) {
 		t.Fatalf("after add: %+v", h.store.subs)
 	}
 
-	h.tap("mv:Home:13.60000,100.50000")
+	h.tap("mv:1:13.60000,100.50000")
 	if h.store.subs[0].Label != "Home" || h.store.subs[0].Lat != 13.6 {
 		t.Errorf("after move: %+v", h.store.subs)
 	}
@@ -257,9 +274,142 @@ func TestAddMoveAndRemoveButtons(t *testing.T) {
 		t.Errorf("baselined %d times, want once per saved place", len(h.eval.baselined))
 	}
 
-	h.tap("rm:Place 2")
+	h.tap("rm:2")
 	if len(h.store.subs) != 1 || !strings.Contains(h.api.edits[len(h.api.edits)-1], "Removed <b>Place 2</b>") {
 		t.Errorf("after remove: %+v, edits %v", h.store.subs, h.api.edits)
+	}
+}
+
+// Buttons already sitting in people's chats name the place instead of
+// numbering it, and must keep working.
+func TestButtonsFromBeforePlaceIDsStillWork(t *testing.T) {
+	h := newHarness()
+	h.location(13.6515, 100.4945)
+	h.tap("add:13.70000,100.49000")
+
+	h.tap("mv:Home:13.60000,100.50000")
+	if h.store.subs[0].Lat != 13.6 {
+		t.Errorf("legacy move: %+v", h.store.subs)
+	}
+	h.tap("rm:Place 2")
+	if len(h.store.subs) != 1 {
+		t.Errorf("legacy remove: %+v", h.store.subs)
+	}
+}
+
+func TestButtonsCannotTouchSomeoneElsesPlace(t *testing.T) {
+	h := newHarness()
+	h.store.subs = []alert.Subscription{{ID: 9, Recipient: "77", Label: "Home"}}
+	h.store.nextID = 9
+	h.tap("rm:9")
+	if len(h.store.subs) != 1 {
+		t.Errorf("another person's place was removed: %+v", h.store.subs)
+	}
+}
+
+var tags = regexp.MustCompile(`<[^>]+>`)
+
+// asTelegramQuotes returns a sent message the way Telegram quotes it back in a
+// reply: formatting stripped and entities decoded.
+func asTelegramQuotes(m telegram.OutgoingMessage) *telegram.Message {
+	return &telegram.Message{From: &telegram.User{IsBot: true}, Text: html.UnescapeString(tags.ReplaceAllString(m.Text, ""))}
+}
+
+func (h *harness) replyTo(m telegram.OutgoingMessage, text string) {
+	h.bot.handle(context.Background(), telegram.Update{Message: &telegram.Message{
+		Chat: telegram.Chat{ID: me, Type: "private"}, Text: text, ReplyToMessage: asTelegramQuotes(m),
+	}})
+}
+
+func TestNewPlaceAsksForAName(t *testing.T) {
+	h := newHarness()
+	h.location(13.6515, 100.4945)
+	h.tap("add:13.70000,100.49000")
+
+	prompt := h.api.last(t)
+	if _, ok := prompt.ReplyMarkup.(telegram.ForceReply); !ok || !strings.Contains(prompt.Text, "What should I call <b>Place 2</b>?") {
+		t.Fatalf("after adding, last message = %q with %T", prompt.Text, prompt.ReplyMarkup)
+	}
+
+	h.replyTo(prompt, "  บ้านแม่   (Mum's) ")
+	if h.store.subs[1].Label != "บ้านแม่ (Mum's)" {
+		t.Errorf("label = %q", h.store.subs[1].Label)
+	}
+	if !strings.Contains(h.api.last(t).Text, "Renamed <b>Place 2</b> to <b>บ้านแม่ (Mum&#39;s)</b>.") {
+		t.Errorf("reply = %q", h.api.last(t).Text)
+	}
+}
+
+func TestFirstPlaceDoesNotAskForAName(t *testing.T) {
+	h := newHarness()
+	h.location(13.6515, 100.4945)
+	if _, ok := h.api.last(t).ReplyMarkup.(telegram.ForceReply); ok {
+		t.Error("Home was asked for a name; it already has one")
+	}
+}
+
+func TestRenameFromPlaces(t *testing.T) {
+	h := newHarness()
+	h.location(13.6515, 100.4945)
+
+	h.text("/places")
+	if got := buttons(t, h.api.last(t)); strings.Join(got, " ") != "rn:1 rm:1" {
+		t.Fatalf("buttons = %v", got)
+	}
+	h.tap("rn:1")
+	h.replyTo(h.api.last(t), "Condo")
+	if h.store.subs[0].Label != "Condo" {
+		t.Errorf("label = %q", h.store.subs[0].Label)
+	}
+}
+
+func TestBadNamesAreRefused(t *testing.T) {
+	for name, want := range map[string]string{
+		"   ":                                "at least one letter or number",
+		"...":                                "at least one letter or number",
+		strings.Repeat("ก", maxLabelRunes+1): "30 characters or fewer",
+		"home":                               "already have a place called <b>Home</b>",
+	} {
+		h := newHarness()
+		h.location(13.6515, 100.4945)
+		h.tap("add:13.70000,100.49000")
+		h.replyTo(h.api.last(t), name)
+		if h.store.subs[1].Label != "Place 2" || !strings.Contains(h.api.last(t).Text, want) {
+			t.Errorf("%q: label %q, reply %q", name, h.store.subs[1].Label, h.api.last(t).Text)
+		}
+	}
+}
+
+func TestCommandsStillWorkFromTheNamingReplyBox(t *testing.T) {
+	h := newHarness()
+	h.location(13.6515, 100.4945)
+	h.tap("rn:1")
+	h.replyTo(h.api.last(t), "/status")
+	if h.store.subs[0].Label != "Home" || !strings.Contains(h.api.last(t).Text, "📍 <b>Home</b>") {
+		t.Errorf("label %q, reply %q", h.store.subs[0].Label, h.api.last(t).Text)
+	}
+}
+
+// A long Thai name is several times its length in bytes; buttons must stay
+// within Telegram's 64-byte callback data limit regardless.
+func TestButtonsFitTelegramsLimitWithLongNames(t *testing.T) {
+	h := newHarness()
+	h.location(13.6515, 100.4945)
+	h.store.subs[0].Label = strings.Repeat("บ้าน", maxLabelRunes/4)
+	h.location(-13.12345, -100.12345)
+	h.text("/places")
+	for _, m := range h.api.sent {
+		kb, ok := m.ReplyMarkup.(telegram.InlineKeyboard)
+		if !ok {
+			continue
+		}
+		for _, row := range kb.InlineKeyboard {
+			for _, b := range row {
+				if len(b.CallbackData) > 64 {
+					t.Errorf("%d-byte callback data %q", len(b.CallbackData), b.CallbackData)
+				}
+			}
+		}
 	}
 }
 

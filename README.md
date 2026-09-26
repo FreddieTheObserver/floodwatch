@@ -88,13 +88,14 @@ Configuration is read from the environment:
 
 Send the bot a location, or paste coordinates such as `13.6515, 100.4945` from a map app on a computer.
 Your first place is called Home; later locations ask whether to move a place there or add a new one, up to five.
+A new place starts as Place 2, Place 3 and so on, and the bot asks straight away what to call it; any place can be renamed later from `/places`.
 Each new place gets a status message straight away, and after that the bot only writes when something changes.
 Status messages, and alerts about worsening conditions, link to the BMA's [flooded roads map](https://now.bangkok.go.th/flood-alert.html), since a canal gauge kilometres away cannot say whether your street is under water.
 
 | Command | What it does |
 | --- | --- |
 | `/status` | current water levels and rain around each of your places |
-| `/places` | list your places, with buttons to remove them |
+| `/places` | list your places, with buttons to rename or remove them |
 | `/stop` | delete your places and stop all alerts, after a confirmation |
 | `/help` | how the bot works |
 

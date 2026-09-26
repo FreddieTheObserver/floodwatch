@@ -123,10 +123,17 @@ type Update struct {
 }
 
 type Message struct {
-	MessageID int64     `json:"message_id"`
-	Chat      Chat      `json:"chat"`
-	Text      string    `json:"text"`
-	Location  *Location `json:"location"`
+	MessageID      int64     `json:"message_id"`
+	From           *User     `json:"from"`
+	Chat           Chat      `json:"chat"`
+	Text           string    `json:"text"`
+	Location       *Location `json:"location"`
+	ReplyToMessage *Message  `json:"reply_to_message"`
+}
+
+type User struct {
+	ID    int64 `json:"id"`
+	IsBot bool  `json:"is_bot"`
 }
 
 type Chat struct {
@@ -176,6 +183,13 @@ type InlineKeyboard struct {
 type InlineButton struct {
 	Text         string `json:"text"`
 	CallbackData string `json:"callback_data"`
+}
+
+// ForceReply opens the reply box on the message it is sent with, so the
+// user's answer arrives quoting it.
+type ForceReply struct {
+	ForceReply            bool   `json:"force_reply"`
+	InputFieldPlaceholder string `json:"input_field_placeholder,omitempty"`
 }
 
 type OutgoingMessage struct {

@@ -189,6 +189,34 @@ func (q *Queries) LockRecipient(ctx context.Context, arg LockRecipientParams) er
 	return err
 }
 
+const renameRecipientSubscription = `-- name: RenameRecipientSubscription :execrows
+UPDATE subscriptions
+   SET label = $1
+ WHERE channel = $2
+   AND recipient = $3
+   AND label = $4
+`
+
+type RenameRecipientSubscriptionParams struct {
+	NewLabel  string
+	Channel   string
+	Recipient string
+	OldLabel  string
+}
+
+func (q *Queries) RenameRecipientSubscription(ctx context.Context, arg RenameRecipientSubscriptionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, renameRecipientSubscription,
+		arg.NewLabel,
+		arg.Channel,
+		arg.Recipient,
+		arg.OldLabel,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const resetAlertStates = `-- name: ResetAlertStates :exec
 DELETE FROM alert_states
  WHERE subscription_id = $1

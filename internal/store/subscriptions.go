@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/FreddieTheObserver/floodwatch/internal/alert"
 	"github.com/FreddieTheObserver/floodwatch/internal/store/gen"
@@ -76,6 +77,23 @@ func (s *Store) RecipientSubscriptions(ctx context.Context, channel, recipient s
 	}
 	return out, nil
 }
+
+// ErrLabelTaken means the subscriber already has a place by that name.
+var ErrLabelTaken = errors.New("label taken")
+
+// RenameSubscription renames one place and reports whether it existed. Its
+// alert history is kept, since the place itself has not moved.
+func (s *Store) RenameSubscription(ctx context.Context, channel, recipient, from, to string) (bool, error) {
+	n, err := s.RenameRecipientSubscription(ctx, gen.RenameRecipientSubscriptionParams{
+		Channel: channel, Recipient: recipient, OldLabel: from, NewLabel: to,
+	})
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == uniqueViolation {
+		return false, ErrLabelTaken
+	}
+	return n > 0, err
+}
+
+const uniqueViolation = "23505"
 
 // RemoveSubscription deletes one place and reports whether it existed.
 func (s *Store) RemoveSubscription(ctx context.Context, channel, recipient, label string) (bool, error) {
