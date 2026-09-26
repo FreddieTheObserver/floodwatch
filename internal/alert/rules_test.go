@@ -110,7 +110,7 @@ func TestWatchedStations(t *testing.T) {
 // switched off, so they are alive but stale, and a working gauge sits just
 // outside the radius.
 func TestFallbackSkipsStaleNeighbours(t *testing.T) {
-	stale := RainPoint{At: now.Add(-3 * time.Hour), Rain1h: mm(0)}
+	stale := RainPoint{At: now.Add(-4 * time.Hour), Rain1h: mm(0)}
 	f := newFixture().
 		rain(north(11, source.KindRain, 2, nil), stale).
 		rain(north(12, source.KindRain, 3, nil), stale).
@@ -207,7 +207,7 @@ func TestRainTakesWorstFreshGauge(t *testing.T) {
 		rain(north(11, source.KindRain, 1, nil), RainPoint{At: now, Rain1h: mm(5), Rain24h: mm(60)}).
 		rain(north(12, source.KindRain, 2, nil), RainPoint{At: now.Add(-30 * time.Minute), Rain1h: mm(45), Rain24h: mm(80)}).
 		rain(north(13, source.KindRain, 3, nil), RainPoint{At: now, Rain24h: mm(100)}).
-		rain(north(14, source.KindRain, 4, nil), RainPoint{At: now.Add(-3 * time.Hour), Rain1h: mm(90)}) // stale
+		rain(north(14, source.KindRain, 4, nil), RainPoint{At: now.Add(-4 * time.Hour), Rain1h: mm(90)}) // stale
 
 	got := find(t, Assess(f.snap, home, nil), 0, RuleRain)
 	if !got.Known || got.Severity != SeverityWarning || got.Station.ID != 12 || got.FreshGauges != 3 {
@@ -233,7 +233,7 @@ func TestRainHysteresis(t *testing.T) {
 }
 
 func TestRainGaugesAllQuiet(t *testing.T) {
-	f := newFixture().rain(north(11, source.KindRain, 1, nil), RainPoint{At: now.Add(-3 * time.Hour), Rain1h: mm(0)})
+	f := newFixture().rain(north(11, source.KindRain, 1, nil), RainPoint{At: now.Add(-4 * time.Hour), Rain1h: mm(0)})
 	fs := Assess(f.snap, home, nil)
 	if rain := find(t, fs, 0, RuleRain); rain.Known {
 		t.Errorf("rain judged from a stale gauge: %+v", rain)

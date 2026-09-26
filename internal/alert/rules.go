@@ -25,10 +25,11 @@ const (
 func (r Rule) IsArea() bool { return r == RuleRain || r == RuleRainStale }
 
 const (
-	// Readings older than these no longer describe the present. ThaiWater's
-	// rain feed often lags an hour or more behind its water levels.
+	// Readings older than these no longer describe the present. ThaiWater
+	// publishes rain hourly and about an hour late, so a working gauge's newest
+	// reading is routinely two hours old just before the next one lands.
 	waterFresh = 3 * time.Hour
-	rainFresh  = 2 * time.Hour
+	rainFresh  = 3 * time.Hour
 	// A station silent for longer than this is treated as retired, not as a live
 	// one that went quiet, so it is neither watched nor alerted on.
 	AliveWithin = 48 * time.Hour
