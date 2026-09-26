@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"math"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/FreddieTheObserver/floodwatch/internal/telegram"
 )
 
-// thai has had one round of native-speaker review (26 September 2026); the
-// risk names and actions still need checking against the terms Thai
-// residents know from official flood warnings.
+// thai has had two rounds of native-speaker review, on 26 and 27 September
+// 2026; docs/TRANSLATION.md records what each changed and what is still open.
 var thai = texts{
 	Code: "th",
 
@@ -55,12 +56,12 @@ var thai = texts{
 		{"ยังไม่ต้องทำอะไรในตอนนี้"},
 		{"ติดตามข่าวสารอย่างต่อเนื่อง", "ตรวจสอบแผนที่น้ำท่วมก่อนออกเดินทาง"},
 		{"ย้ายรถไปจอดในที่สูง", "ยกของมีค่าขึ้นจากพื้น", "หลีกเลี่ยงถนนที่อยู่ต่ำ"},
-		{"ย้ายรถและของมีค่าขึ้นที่สูงทันที", "หลีกเลี่ยงถนนที่มีน้ำท่วม", "ปฏิบัติตามคำแนะนำของ กทม. (สายด่วน 1555)"},
+		{"ย้ายรถและของมีค่าขึ้นไปไว้ในที่สูงทันที", "หลีกเลี่ยงถนนที่มีน้ำท่วม", "ปฏิบัติตามคำแนะนำของ กทม. (สายด่วน 1555)"},
 		{"ติดตามประกาศทางการของ กทม.", "ตรวจสอบแผนที่น้ำท่วมก่อนออกเดินทาง"},
 	},
 	Trends: [4]string{"", "↘ สถานการณ์ดีขึ้น", "→ สถานการณ์ทรงตัว", "↗ สถานการณ์แย่ลง"},
 	Headline: func(icon, risk, label string) string {
-		return fmt.Sprintf("%s <b>%s</b> บริเวณ <b>%s</b>", icon, risk, label)
+		return fmt.Sprintf("%s <b>%s</b> บริเวณ%s<b>%s</b>", icon, risk, thaiSpace(label), label)
 	},
 	Transition: func(icon, label, from, to string) string {
 		return fmt.Sprintf("%s <b>%s: %s → %s</b>", icon, label, from, to)
@@ -74,7 +75,7 @@ var thai = texts{
 	WhatToDo:   "สิ่งที่ควรทำ",
 	FloodRoads: `🚗 <a href="` + floodRoadsURL + `">ถนนที่มีน้ำท่วมตอนนี้</a> บนแผนที่ของ กทม. (ซูมไปที่พื้นที่ของคุณ)`,
 	NothingRaised: func(label string) string {
-		return fmt.Sprintf("ยังไม่มีสถานีวัดใกล้ %s ที่ถึงระดับเฝ้าระวัง", label)
+		return fmt.Sprintf("ระดับน้ำและปริมาณฝนที่สถานีวัดใกล้ %s ยังไม่ถึงเกณฑ์เฝ้าระวัง", label)
 	},
 	NoRecentData: func(label string) string {
 		return fmt.Sprintf("ไม่มีสถานีวัดใกล้ %s ส่งข้อมูลในช่วงไม่กี่ชั่วโมงที่ผ่านมา", label)
@@ -137,7 +138,7 @@ var thai = texts{
 	TideFalling: func(station string, hours int) string {
 		return fmt.Sprintf("คาดการณ์น้ำขึ้นน้ำลง: น้ำกำลังลง ระดับน้ำที่ %s คาดว่าจะไม่สูงกว่าระดับปัจจุบันในอีก %d ชั่วโมงข้างหน้า", station, hours)
 	},
-	TidePredictions: "ข้อมูลน้ำขึ้นน้ำลง: สสน.",
+	TidePredictions: "ข้อมูลคาดการณ์น้ำขึ้นน้ำลง: สสน.",
 	WaterHeld: func(station, bank, at string) string {
 		return fmt.Sprintf("%s %s เมื่อส่งข้อมูลครั้งล่าสุดเวลา %s และไม่มีข้อมูลตั้งแต่นั้น", station, bank, at)
 	},
@@ -185,7 +186,7 @@ var thai = texts{
 	Measured:   func(at, ago string) string { return fmt.Sprintf("วัดเมื่อ %s · %s", at, ago) },
 	RainTotals: [3]string{"1 ชั่วโมง", "3 ชั่วโมง", "24 ชั่วโมง"},
 	WettestOf: func(n int) string {
-		return fmt.Sprintf("มีปริมาณฝนสูงสุดเมื่อเทียบกับ %d สถานีใกล้เคียงที่ส่งข้อมูล", n)
+		return fmt.Sprintf("มีปริมาณฝนสูงสุดจาก %d สถานีใกล้เคียงที่ส่งข้อมูล", n)
 	},
 	RegionalNote: func(radius string) string {
 		return fmt.Sprintf("สถานีที่อยู่นอกรัศมี %s จากพื้นที่ของคุณ แสดงไว้เพราะอาจบ่งบอกสถานการณ์น้ำท่วมในภาพรวม", radius)
@@ -313,12 +314,12 @@ FloodWatch เก็บเพียงหมายเลขแชต ภาษ�
 		return fmt.Sprintf("%d %s %s น.", t.Day(), thaiMonths[t.Month()-1], t.Format("15:04"))
 	},
 	Offline: func(from, to, took string) string {
-		return fmt.Sprintf("⚠️ <b>FloodWatch ไม่ได้ทำงานตั้งแต่ %s ถึง %s</b> (ประมาณ %s) จึงไม่สามารถแจ้งเตือนคุณได้ในช่วงเวลานั้น", from, to, took)
+		return fmt.Sprintf("⚠️ <b>FloodWatch ไม่ทำงานตั้งแต่ %s ถึง %s</b> (ประมาณ %s) จึงไม่สามารถแจ้งเตือนคุณได้ในช่วงเวลานั้น", from, to, took)
 	},
 	OfflinePlaces: "ตอนนี้กลับมาทำงานแล้ว สถานการณ์ของสถานที่ของคุณตอนนี้:",
 	OfflineStatus: "ส่ง /status เพื่อดูรายละเอียด",
 	LateReply: func(at string) string {
-		return "ขออภัยที่ตอบช้า FloodWatch ไม่ได้ทำงานตอนที่คุณส่งข้อความมาเมื่อ " + at
+		return "ขออภัยที่ตอบช้า FloodWatch ไม่ทำงานตอนที่คุณส่งข้อความมาเมื่อ " + at
 	},
 }
 
@@ -333,4 +334,14 @@ func thaiForecastBank(level, bank float64) string {
 	default:
 		return "ใกล้เคียงกับตลิ่ง"
 	}
+}
+
+// thaiSpace separates Thai text from a name that follows it: Thai runs
+// straight on into a Thai name, but takes a space before Latin letters or
+// digits.
+func thaiSpace(name string) string {
+	if r, _ := utf8.DecodeRuneInString(name); unicode.Is(unicode.Thai, r) {
+		return ""
+	}
+	return " "
 }

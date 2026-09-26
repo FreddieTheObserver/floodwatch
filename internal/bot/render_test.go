@@ -283,7 +283,7 @@ func TestThaiTideForecast(t *testing.T) {
 	text := statusText(&thai, home, tidal(4*time.Hour+40*time.Minute, 1.83), checked)
 	for _, want := range []string{
 		"คาดการณ์น้ำขึ้นน้ำลง: เมื่อน้ำขึ้นสูงสุดราว 18:10 น. ระดับน้ำที่ Chao Phraya 15 ห่าง 5.4 กม. คาดว่าจะต่ำกว่าตลิ่งประมาณ 0.35 ม.",
-		"ข้อมูลน้ำขึ้นน้ำลง: สสน.",
+		"ข้อมูลคาดการณ์น้ำขึ้นน้ำลง: สสน.",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in:\n%s", want, text)

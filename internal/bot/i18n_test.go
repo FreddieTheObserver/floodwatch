@@ -130,7 +130,7 @@ func TestThaiStatus(t *testing.T) {
 		"<blockquote expandable><b>รายละเอียด</b>",
 		"<b>ระดับน้ำ</b>\nเจ้าพระยา 15 (5.4 กม., นอกรัศมี)\nต่ำกว่าตลิ่ง 1.82 ม.\nวัดเมื่อ 13:30 น. · 50 นาทีที่แล้ว",
 		"<b>ฝน</b>\nกรุงเทพ 3 (4.9 กม.)\n1 ชั่วโมง: 0.5 มม.\n24 ชั่วโมง: 124 มม.",
-		"มีปริมาณฝนสูงสุดเมื่อเทียบกับ 7 สถานีใกล้เคียงที่ส่งข้อมูล",
+		"มีปริมาณฝนสูงสุดจาก 7 สถานีใกล้เคียงที่ส่งข้อมูล",
 		"สถานีที่อยู่นอกรัศมี 5 กม. จากพื้นที่ของคุณ",
 		"<b>แนวโน้ม</b>\nสถานการณ์ดีขึ้นเพราะฝนที่ กรุงเทพ 3 เบาลง",
 		"<b>แหล่งข้อมูล</b>\nสถานีวัดระดับน้ำ: HII\nสถานีวัดฝน: HII\nแหล่งข้อมูล: ThaiWater (สสน.)",
@@ -211,6 +211,18 @@ func TestThaiRegionalPrefixNamesTheKindOfReading(t *testing.T) {
 		a := alert.Assessment{Risk: alert.Risk{Level: alert.SeverityWarning, Drivers: []alert.Finding{driver}}}
 		if got := happeningText(&thai, home, a); got != want {
 			t.Errorf("\n got  %q\n want %q", got, want)
+		}
+	}
+}
+
+func TestThaiRunsStraightOnIntoAThaiName(t *testing.T) {
+	for label, want := range map[string]string{
+		"บ้าน":         "🟢 <b>ปกติ</b> บริเวณ<b>บ้าน</b>",
+		"Elio Del Ray": "🟢 <b>ปกติ</b> บริเวณ <b>Elio Del Ray</b>",
+		"3rd floor":    "🟢 <b>ปกติ</b> บริเวณ <b>3rd floor</b>",
+	} {
+		if got := thai.Headline("🟢", "ปกติ", label); got != want {
+			t.Errorf("headline for %q = %q, want %q", label, got, want)
 		}
 	}
 }

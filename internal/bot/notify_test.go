@@ -140,7 +140,7 @@ func TestAGapFromAnotherDayIsDated(t *testing.T) {
 	if err := h.bot.Notify(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	want := "FloodWatch ไม่ได้ทำงานตั้งแต่ 25 ก.ย. 23:10 น. ถึง 14:20 น.</b> (ประมาณ 15 ชั่วโมง)"
+	want := "FloodWatch ไม่ทำงานตั้งแต่ 25 ก.ย. 23:10 น. ถึง 14:20 น.</b> (ประมาณ 15 ชั่วโมง)"
 	if len(h.api.sent) != 1 || !strings.Contains(h.api.sent[0].Text, want) {
 		t.Errorf("notice = %v, want it to contain %q", h.api.sent, want)
 	}
