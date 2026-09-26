@@ -64,6 +64,11 @@ Water gauges are sparse, so for many districts the nearest one is several kilome
 | --- | --- | --- |
 | [ThaiWater](https://www.thaiwater.net/) (Hydro-Informatics Institute) | water level and rain gauges for Bangkok and the five surrounding provinces | in use |
 | [BMA Drainage and Sewerage Department](https://weather.bangkok.go.th/) | about 120 rain gauges across Bangkok | used as republished by ThaiWater since 26 September 2026, credited to the department; polling its own site stays off until it permits automated access |
+| [HII tide predictions](https://www.thaiwater.net/water/ocean) | hourly predicted tide, a year ahead, for the Chao Phraya from Bangkok to its mouth and the Tha Chin mouth | collected every 6 hours since 26 September 2026; not yet used in alerts |
+
+Gauges near the river mouth rise and fall with the tide twice a day.
+The tide predictions are collected so that a gauge's reading can later be split into what the tide explains and what it does not, which is the part that signals flooding.
+Only the three days behind and fourteen days ahead of now are kept, since HII publishes a whole year per file and revises it.
 
 ThaiWater publishes rain hourly and about an hour late, so rain alerts can trail real rainfall by one to two hours.
 Every gauge records the agency that runs it, and any message drawing on BMA gauges credits the department.
@@ -117,6 +122,7 @@ Configuration is read from the environment:
 | `FLOODWATCH_BMA_RAIN_ENABLED` | `false` | poll the BMA rain gauges |
 | `FLOODWATCH_TELEGRAM_TOKEN` | none | bot token from @BotFather; keep it in `.env` |
 | `FLOODWATCH_HEALTHCHECK_URL` | none | watchdog ping URL; keep it in `.env` |
+| `FLOODWATCH_TIDE_STATIONS` | `N01,N02,N03,N04,N05` | HII tide stations to collect |
 | `FLOODWATCH_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 
 ## Using the bot
@@ -160,7 +166,7 @@ Store tests start their own Postgres with testcontainers, so they need Docker bu
 | Package | Role |
 | --- | --- |
 | `internal/source` | fetch and normalise each feed; fixtures in `testdata` are trimmed real responses |
-| `internal/collect` | poll loop, per-source isolation and backoff |
+| `internal/collect` | poll loop, per-source isolation and backoff, and the tide sync |
 | `internal/alert` | pure rules and the evaluator |
 | `internal/bot` | Telegram sign-up, commands, message rendering and alert delivery |
 | `internal/telegram` | minimal Bot API client that keeps the token out of errors and logs |
