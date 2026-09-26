@@ -135,10 +135,15 @@ Status messages, and alerts about a raised risk, link to the BMA's [flooded road
 | --- | --- |
 | `/status` | the flood risk around each of your places, why, and what to do |
 | `/places` | list your places, with buttons to rename or remove them |
+| `/language` | switch between Thai and English |
 | `/stop` | delete your places and stop all alerts, after a confirmation |
 | `/help` | how the bot works |
 
-The bot stores only your chat ID and the coordinates you send.
+The bot speaks Thai to people whose Telegram app is set to Thai and English to everyone else, and remembers a choice made with `/language` so alerts use it too.
+Thai readers see stations under their Thai names.
+The Thai wording is a draft awaiting review; [docs/TRANSLATION.md](docs/TRANSLATION.md) has the glossary and how to change it.
+
+The bot stores only your chat ID, your language and the coordinates you send.
 If you block it, it deletes them on its next attempt to message you.
 It ignores group chats, where alerts would expose every member's places.
 
