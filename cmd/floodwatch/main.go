@@ -49,12 +49,16 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	}
 
 	client := &http.Client{}
-	fetchers := []source.Fetcher{source.BMARain(client)}
+	var fetchers []source.Fetcher
+	if cfg.BMARain {
+		fetchers = append(fetchers, source.BMARain(client))
+	}
 	for _, p := range cfg.Provinces {
 		fetchers = append(fetchers, source.ThaiWaterLevels(client, p), source.ThaiWaterRain(client, p))
 	}
 
-	log.Info("floodwatch starting", "sources", len(fetchers), "poll_interval", cfg.PollInterval.String())
+	log.Info("floodwatch starting", "sources", len(fetchers), "bma_rain", cfg.BMARain,
+		"poll_interval", cfg.PollInterval.String())
 	collect.New(fetchers, st, log, cfg.PollInterval, cfg.FetchTimeout).Run(ctx)
 	log.Info("floodwatch stopped")
 	return nil

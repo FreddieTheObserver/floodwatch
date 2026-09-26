@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,6 +17,7 @@ type Config struct {
 	PollInterval time.Duration
 	FetchTimeout time.Duration
 	Provinces    []string
+	BMARain      bool
 }
 
 const (
@@ -41,6 +43,9 @@ func Load(getenv func(string) string) (Config, error) {
 		PollInterval: l.duration("FLOODWATCH_POLL_INTERVAL", DefaultPollInterval, MinPollInterval),
 		FetchTimeout: l.duration("FLOODWATCH_FETCH_TIMEOUT", DefaultFetchTimeout, time.Second),
 		Provinces:    l.provinces("FLOODWATCH_PROVINCES", DefaultProvinces),
+		// Off until the BMA Drainage Department permits automated access to its
+		// rain gauges; permission was requested on 2026-09-26.
+		BMARain: l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
 	}
 	if cfg.DSN == "" {
 		l.errs = append(l.errs, errors.New("FLOODWATCH_DSN is required"))
@@ -87,6 +92,19 @@ func (l *loader) level(name string) slog.Level {
 		l.fail(name, "one of debug, info, warn or error", raw)
 	}
 	return level
+}
+
+func (l *loader) boolean(name string, def bool) bool {
+	raw := l.getenv(name)
+	if raw == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(raw)
+	if err != nil {
+		l.fail(name, "true or false", raw)
+		return def
+	}
+	return b
 }
 
 func (l *loader) provinces(name, def string) []string {
