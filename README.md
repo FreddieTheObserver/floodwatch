@@ -181,7 +181,7 @@ Messages sent to the bot while it was offline, which Telegram holds for up to a 
 
 The bot speaks Thai to people whose Telegram app is set to Thai and English to everyone else, and remembers a choice made with `/language` so alerts use it too.
 Thai readers see stations under their Thai names.
-The Thai wording is a draft awaiting review; [docs/TRANSLATION.md](docs/TRANSLATION.md) has the glossary and how to change it.
+The Thai wording has had two rounds of native-speaker review; [docs/TRANSLATION.md](docs/TRANSLATION.md) records them, with the glossary and how to change it.
 
 The bot stores only your chat ID, your language and the coordinates you send.
 If you block it, it deletes them on its next attempt to message you.
