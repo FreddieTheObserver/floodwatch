@@ -10,7 +10,7 @@ import (
 
 type AlertState struct {
 	SubscriptionID int64
-	StationID      int64
+	StationID      *int64
 	Rule           string
 	Severity       int16
 	ChangedAt      time.Time

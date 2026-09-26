@@ -1,0 +1,92 @@
+package store
+
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/FreddieTheObserver/floodwatch/internal/alert"
+	"github.com/FreddieTheObserver/floodwatch/internal/store/gen"
+)
+
+// MaxPlaces is how many places one subscriber may watch.
+const MaxPlaces = 5
+
+var ErrTooManyPlaces = errors.New("too many places")
+
+// SaveSubscription adds a place, or moves an existing one with the same label.
+// A moved place watches different stations, so what was told about the old
+// spot is forgotten.
+func (s *Store) SaveSubscription(ctx context.Context, sub alert.Subscription) (alert.Subscription, error) {
+	var saved alert.Subscription
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.WithTx(tx)
+		// Serialises one subscriber's changes, so two at once cannot both slip
+		// under MaxPlaces.
+		if err := q.LockRecipient(ctx, gen.LockRecipientParams{Channel: sub.Channel, Recipient: sub.Recipient}); err != nil {
+			return err
+		}
+
+		existing, err := q.GetRecipientSubscription(ctx, gen.GetRecipientSubscriptionParams{
+			Channel: sub.Channel, Recipient: sub.Recipient, Label: sub.Label,
+		})
+		isNew := errors.Is(err, pgx.ErrNoRows)
+		if err != nil && !isNew {
+			return err
+		}
+		if isNew {
+			n, err := q.CountRecipientSubscriptions(ctx, gen.CountRecipientSubscriptionsParams{
+				Channel: sub.Channel, Recipient: sub.Recipient,
+			})
+			if err != nil {
+				return err
+			}
+			if n >= MaxPlaces {
+				return ErrTooManyPlaces
+			}
+		}
+
+		row, err := q.UpsertSubscription(ctx, gen.UpsertSubscriptionParams{
+			Channel: sub.Channel, Recipient: sub.Recipient, Label: sub.Label,
+			Lat: sub.Lat, Lng: sub.Lng, RadiusM: int32(sub.RadiusM),
+		})
+		if err != nil {
+			return err
+		}
+		if !isNew && (existing.Lat != row.Lat || existing.Lng != row.Lng || existing.RadiusM != row.RadiusM) {
+			if err := q.ResetAlertStates(ctx, row.ID); err != nil {
+				return err
+			}
+		}
+		saved = subscription(row)
+		return nil
+	})
+	return saved, err
+}
+
+func (s *Store) RecipientSubscriptions(ctx context.Context, channel, recipient string) ([]alert.Subscription, error) {
+	rows, err := s.ListRecipientSubscriptions(ctx, gen.ListRecipientSubscriptionsParams{Channel: channel, Recipient: recipient})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]alert.Subscription, len(rows))
+	for i, r := range rows {
+		out[i] = subscription(r)
+	}
+	return out, nil
+}
+
+// RemoveSubscription deletes one place and reports whether it existed.
+func (s *Store) RemoveSubscription(ctx context.Context, channel, recipient, label string) (bool, error) {
+	n, err := s.DeleteRecipientSubscription(ctx, gen.DeleteRecipientSubscriptionParams{
+		Channel: channel, Recipient: recipient, Label: label,
+	})
+	return n > 0, err
+}
+
+// ForgetRecipient deletes every place of one subscriber, and with them all
+// alert history, which is everything stored about that person.
+func (s *Store) ForgetRecipient(ctx context.Context, channel, recipient string) (int64, error) {
+	return s.DeleteRecipient(ctx, gen.DeleteRecipientParams{Channel: channel, Recipient: recipient})
+}
