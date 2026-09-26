@@ -31,7 +31,7 @@ func (f *fakeAPI) SendVenue(_ context.Context, _ int64, _, _ float64, title, add
 }
 
 func (f *fakeAPI) GetUpdates(context.Context, int64, int) ([]telegram.Update, error) { return nil, nil }
-func (f *fakeAPI) SetMyCommands(context.Context, []telegram.Command) error           { return nil }
+func (f *fakeAPI) SetMyCommands(context.Context, []telegram.Command, string) error   { return nil }
 func (f *fakeAPI) AnswerCallbackQuery(context.Context, string) error                 { return nil }
 func (f *fakeAPI) SendMessage(_ context.Context, m telegram.OutgoingMessage) error {
 	if err := f.sendErr[m.ChatID]; err != nil {
@@ -57,6 +57,19 @@ type fakeStore struct {
 	subs      []alert.Subscription
 	nextID    int64
 	forgotten []string
+	languages map[string]string
+}
+
+func (s *fakeStore) RecipientLanguage(_ context.Context, _, rcpt string) (string, error) {
+	return s.languages[rcpt], nil
+}
+
+func (s *fakeStore) SetRecipientLanguage(_ context.Context, _, rcpt, lang string) error {
+	if s.languages == nil {
+		s.languages = map[string]string{}
+	}
+	s.languages[rcpt] = lang
+	return nil
 }
 
 func (s *fakeStore) SaveSubscription(_ context.Context, sub alert.Subscription) (alert.Subscription, error) {
@@ -118,6 +131,7 @@ func (s *fakeStore) RemoveSubscription(_ context.Context, _, rcpt, label string)
 
 func (s *fakeStore) ForgetRecipient(_ context.Context, _, rcpt string) (int64, error) {
 	s.forgotten = append(s.forgotten, rcpt)
+	delete(s.languages, rcpt)
 	var kept []alert.Subscription
 	var n int64
 	for _, x := range s.subs {
@@ -342,7 +356,7 @@ func TestNewPlaceAsksForAName(t *testing.T) {
 	h.tap("add:13.70000,100.49000")
 
 	prompt := h.api.last(t)
-	if _, ok := prompt.ReplyMarkup.(telegram.ForceReply); !ok || !strings.Contains(prompt.Text, "What should I call <b>Place 2</b>?") {
+	if _, ok := prompt.ReplyMarkup.(telegram.ForceReply); !ok || !strings.Contains(prompt.Text, "✏️ <b>Place 2</b>\nWhat should I call this place?") {
 		t.Fatalf("after adding, last message = %q with %T", prompt.Text, prompt.ReplyMarkup)
 	}
 
@@ -474,7 +488,7 @@ func TestUncoveredLocationIsRefused(t *testing.T) {
 		Risk:     alert.Risk{Level: alert.RiskUnknown},
 	}
 	h.location(18.79, 98.98)
-	if len(h.store.subs) != 0 || h.api.last(t).Text != notCoveredText {
+	if len(h.store.subs) != 0 || h.api.last(t).Text != english.NotCovered {
 		t.Errorf("subs = %+v, reply = %q", h.store.subs, h.api.last(t).Text)
 	}
 }
@@ -597,7 +611,7 @@ func TestNextLabel(t *testing.T) {
 		{subs("Home", "Place 3"), "Place 2"},
 		{subs("Place 2"), "Home"},
 	} {
-		if got := nextLabel(c.have); got != c.want {
+		if got := nextLabel(&english, c.have); got != c.want {
 			t.Errorf("nextLabel(%v) = %q, want %q", c.have, got, c.want)
 		}
 	}

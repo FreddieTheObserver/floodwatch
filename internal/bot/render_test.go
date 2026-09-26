@@ -37,12 +37,12 @@ func details(text string) string {
 }
 
 func TestStatusFollowsTheAgreedOrder(t *testing.T) {
-	text := statusText(home, sampleAssessment(), checked)
+	text := statusText(&english, home, sampleAssessment(), checked)
 	inOrder(t, text,
 		"🟡 <b>WATCH</b> around <b>Home</b> · ↘ improving",
 		"Krung Thep 3, 4.9 km away, recorded 124 mm over the last 24 hours, above FloodWatch's 90 mm threshold, with 0.5 mm in the last hour.",
 		"<b>What to do</b>\n• Keep an eye on updates.\n• Check the flood map before driving.",
-		floodRoadsLine,
+		english.FloodRoads,
 		"<blockquote expandable><b>Details</b>",
 		"<b>WATER</b>\nChao Phraya 15 (5.4 km, regional)\n1.82 m below bank\nMeasured 13:30 · 50 min ago",
 		"<b>RAIN</b>\nKrung Thep 3 (4.9 km)\n1 hour: 0.5 mm\n24 hours: 124 mm\nMeasured 13:30 · 50 min ago\nWettest of 7 nearby gauges reporting.",
@@ -51,7 +51,7 @@ func TestStatusFollowsTheAgreedOrder(t *testing.T) {
 		"<b>SOURCES</b>\nWater gauges: HII\nRain gauges: HII\nData: ThaiWater (HII)",
 		"</blockquote>",
 		"Checked 14:20",
-		disclaimer,
+		english.Disclaimer,
 	)
 	if strings.Contains(text, bmaCredit) {
 		t.Errorf("BMA credited though only HII gauges were used:\n%s", text)
@@ -61,7 +61,7 @@ func TestStatusFollowsTheAgreedOrder(t *testing.T) {
 // Measurement and interpretation stay apart: the details carry numbers and
 // times only, and every verdict lives above them.
 func TestDetailsHoldMeasurementsOnly(t *testing.T) {
-	d := details(statusText(home, sampleAssessment(), checked))
+	d := details(statusText(&english, home, sampleAssessment(), checked))
 	if d == "" {
 		t.Fatal("no details section")
 	}
@@ -79,15 +79,15 @@ func TestEveryStateKeepsTheSameShape(t *testing.T) {
 		if level > alert.SeverityNone && level < alert.RiskUnknown {
 			a.Risk.Drivers = []alert.Finding{waterDriver(alert.RuleWaterLevel, 1.36, 3, 3)}
 		}
-		inOrder(t, statusText(home, a, checked),
-			riskNames[level], "<b>What to do</b>", floodRoadsLine, "<b>Details</b>", "<b>SOURCES</b>", "Checked 14:20", disclaimer)
+		inOrder(t, statusText(&english, home, a, checked),
+			english.RiskNames[level], "<b>What to do</b>", english.FloodRoads, "<b>Details</b>", "<b>SOURCES</b>", "Checked 14:20", english.Disclaimer)
 	}
 }
 
 func TestStatusWithoutWaterGauges(t *testing.T) {
 	a := sampleAssessment()
 	a.Findings = a.Findings[3:]
-	if text := statusText(home, a, checked); !strings.Contains(text, "No water level gauge within 10 km.") {
+	if text := statusText(&english, home, a, checked); !strings.Contains(text, "No water level gauge within 10 km.") {
 		t.Errorf("missing coverage note:\n%s", text)
 	}
 }
@@ -96,7 +96,7 @@ func TestStatusCreditsBMAGaugesRepublishedByThaiWater(t *testing.T) {
 	a := sampleAssessment()
 	// Not the wettest gauge, but among those judged, which is still using it.
 	a.Findings[3].Agencies = []string{"HII", "BMA"}
-	text := statusText(home, a, checked)
+	text := statusText(&english, home, a, checked)
 	if !strings.Contains(text, bmaCredit) || !strings.Contains(text, "Rain gauges: HII, BMA") {
 		t.Errorf("BMA not credited though its gauges were used:\n%s", text)
 	}
@@ -144,7 +144,7 @@ func TestWhatIsHappening(t *testing.T) {
 	}
 	for _, c := range cases {
 		a := alert.Assessment{Risk: alert.Risk{Level: alert.SeverityWarning, Drivers: []alert.Finding{c.driver}}}
-		if got := happeningText(home, a); got != c.want {
+		if got := happeningText(&english, home, a); got != c.want {
 			t.Errorf("%s:\n got  %q\n want %q", c.name, got, c.want)
 		}
 	}
@@ -164,7 +164,7 @@ func TestTrendReason(t *testing.T) {
 			"Unknown: there are no fresh readings to judge by."},
 	}
 	for _, c := range cases {
-		if got := trendReason(alert.Assessment{Risk: c.risk}); got != c.want {
+		if got := trendReason(&english, alert.Assessment{Risk: c.risk}); got != c.want {
 			t.Errorf("got %q, want %q", got, c.want)
 		}
 	}
@@ -180,23 +180,23 @@ func digest(from, to int, trend alert.Trend) alert.Digest {
 }
 
 func TestDigests(t *testing.T) {
-	worse := digestText(digest(alert.SeverityWatch, alert.SeverityWarning, alert.TrendWorse), checked)
+	worse := digestText(&english, digest(alert.SeverityWatch, alert.SeverityWarning, alert.TrendWorse), checked)
 	inOrder(t, worse,
 		"🟠 <b>Home: WATCH → WARNING</b> · ↗ getting worse",
 		"rising 20 cm/h; at this rate it reaches the bank in about 2 hours.",
 		"<b>What to do</b>\n• Move your car to higher ground.\n• Move valuables off the floor.\n• Avoid low roads.",
-		floodRoadsLine,
+		english.FloodRoads,
 		"<b>Details</b>",
-		disclaimer,
+		english.Disclaimer,
 	)
 
-	clear := digestText(digest(alert.SeverityWarning, alert.SeverityNone, alert.TrendBetter), checked)
+	clear := digestText(&english, digest(alert.SeverityWarning, alert.SeverityNone, alert.TrendBetter), checked)
 	inOrder(t, clear, "✅ <b>Home: back to LOW</b>", "Nothing near Home is at a warning level.", "• Nothing to do right now.")
-	if strings.Contains(clear, floodRoadsLine) {
+	if strings.Contains(clear, english.FloodRoads) {
 		t.Errorf("an all clear sends people to the flood map:\n%s", clear)
 	}
 
-	quiet := digestText(digest(alert.SeverityWatch, alert.RiskUnknown, alert.TrendUnknown), checked)
+	quiet := digestText(&english, digest(alert.SeverityWatch, alert.RiskUnknown, alert.TrendUnknown), checked)
 	inOrder(t, quiet, "⚪ <b>Home: NO DATA</b>", "No gauge near Home has reported in the last few hours.", "• Check official BMA updates.")
 }
 
@@ -204,7 +204,7 @@ func TestNamesAreEscaped(t *testing.T) {
 	d := digest(alert.SeverityNone, alert.SeverityWarning, alert.TrendWorse)
 	d.Subscription.Label = "Mum & Dad's"
 	d.Risk.Drivers[0].Station.Name = "Gate <A&B>"
-	text := digestText(d, checked)
+	text := digestText(&english, d, checked)
 	if strings.Contains(text, "<A&B>") || !strings.Contains(text, "Gate &lt;A&amp;B&gt;") || !strings.Contains(text, "Mum &amp; Dad&#39;s") {
 		t.Errorf("unescaped names:\n%s", text)
 	}
@@ -218,7 +218,7 @@ func TestAgo(t *testing.T) {
 		2 * time.Hour:                "2 h ago",
 		4*time.Hour + 10*time.Minute: "4 h ago",
 	} {
-		if got := ago(checked.Add(-d), checked); got != want {
+		if got := english.Ago(checked.Add(-d), checked); got != want {
 			t.Errorf("ago(%v) = %q, want %q", d, got, want)
 		}
 	}

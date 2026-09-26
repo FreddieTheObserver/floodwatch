@@ -30,7 +30,11 @@ func (b *Bot) Notify(ctx context.Context) error {
 			b.log.Error("subscription has a malformed recipient", "subscription", d.Subscription.ID)
 			continue
 		}
-		err = b.api.SendMessage(ctx, telegram.OutgoingMessage{ChatID: chat, Text: digestText(d, b.now()), ParseMode: "HTML"})
+		t := b.languageOf(ctx, d.Subscription.Recipient)
+		if t == nil {
+			t = &english
+		}
+		err = b.api.SendMessage(ctx, telegram.OutgoingMessage{ChatID: chat, Text: digestText(t, d, b.now()), ParseMode: "HTML"})
 		switch {
 		case telegram.Blocked(err):
 			b.forgetBlocked(ctx, d.Subscription.Recipient)

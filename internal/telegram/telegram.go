@@ -134,6 +134,9 @@ type Message struct {
 type User struct {
 	ID    int64 `json:"id"`
 	IsBot bool  `json:"is_bot"`
+	// LanguageCode is the IETF tag of the user's app language, like "th";
+	// Telegram may leave it empty.
+	LanguageCode string `json:"language_code"`
 }
 
 type Chat struct {
@@ -149,6 +152,7 @@ type Location struct {
 
 type CallbackQuery struct {
 	ID      string   `json:"id"`
+	From    *User    `json:"from"`
 	Data    string   `json:"data"`
 	Message *Message `json:"message"`
 }
@@ -237,6 +241,12 @@ type Command struct {
 	Description string `json:"description"`
 }
 
-func (c *Client) SetMyCommands(ctx context.Context, commands []Command) error {
-	return c.call(ctx, "setMyCommands", map[string]any{"commands": commands}, nil)
+// SetMyCommands sets the command menu shown to users whose app language is
+// languageCode, or to everyone else when it is empty.
+func (c *Client) SetMyCommands(ctx context.Context, commands []Command, languageCode string) error {
+	params := map[string]any{"commands": commands}
+	if languageCode != "" {
+		params["language_code"] = languageCode
+	}
+	return c.call(ctx, "setMyCommands", params, nil)
 }

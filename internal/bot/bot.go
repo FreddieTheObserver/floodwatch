@@ -36,7 +36,7 @@ type API interface {
 	SendVenue(ctx context.Context, chatID int64, lat, lng float64, title, address string) error
 	EditMessageText(ctx context.Context, chatID, messageID int64, text, parseMode string) error
 	AnswerCallbackQuery(ctx context.Context, id string) error
-	SetMyCommands(ctx context.Context, commands []telegram.Command) error
+	SetMyCommands(ctx context.Context, commands []telegram.Command, languageCode string) error
 }
 
 type Store interface {
@@ -45,6 +45,8 @@ type Store interface {
 	RenameSubscription(ctx context.Context, channel, recipient, from, to string) (bool, error)
 	RemoveSubscription(ctx context.Context, channel, recipient, label string) (bool, error)
 	ForgetRecipient(ctx context.Context, channel, recipient string) (int64, error)
+	RecipientLanguage(ctx context.Context, channel, recipient string) (string, error)
+	SetRecipientLanguage(ctx context.Context, channel, recipient, language string) error
 }
 
 type Evaluator interface {
@@ -87,21 +89,20 @@ func New(api API, store Store, eval Evaluator, log *slog.Logger) *Bot {
 	return &Bot{api: api, store: store, eval: eval, log: log, now: time.Now}
 }
 
-var commands = []telegram.Command{
-	{Command: "status", Description: "Current water and rain near your places"},
-	{Command: "places", Description: "List, rename or remove your places"},
-	{Command: "stop", Description: "Stop alerts and delete your data"},
-	{Command: "help", Description: "How FloodWatch works"},
-}
-
 // Run answers incoming messages until ctx is done. It returns an error only
 // when Telegram rejects the token, which no retry can fix.
 func (b *Bot) Run(ctx context.Context) error {
-	if err := b.api.SetMyCommands(ctx, commands); err != nil {
-		if telegram.Unauthorized(err) {
-			return fmt.Errorf("telegram rejected the bot token: %w", err)
+	// The English menu is the default; Thai apps get the Thai one.
+	for _, set := range []struct {
+		t    *texts
+		code string
+	}{{&english, ""}, {&thai, thai.Code}} {
+		if err := b.api.SetMyCommands(ctx, set.t.Commands, set.code); err != nil {
+			if telegram.Unauthorized(err) {
+				return fmt.Errorf("telegram rejected the bot token: %w", err)
+			}
+			b.log.Warn("set bot commands failed", "language", set.t.Code, "err", err)
 		}
-		b.log.Warn("set bot commands failed", "err", err)
 	}
 
 	var offset int64
@@ -160,51 +161,92 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) {
 
 func recipient(chatID int64) string { return strconv.FormatInt(chatID, 10) }
 
+// conversation is who the bot is answering and in which language.
+type conversation struct {
+	id int64
+	t  *texts
+}
+
+// converse opens a conversation in the person's language: the one they chose,
+// or else their Telegram app's, which is then remembered so that alerts,
+// which come with no app language, use it too.
+func (b *Bot) converse(ctx context.Context, chatID int64, from *telegram.User) conversation {
+	c := conversation{id: chatID, t: b.languageOf(ctx, recipient(chatID))}
+	if c.t != nil {
+		return c
+	}
+	code := ""
+	if from != nil {
+		code = from.LanguageCode
+	}
+	c.t = languageFor(code)
+	if err := b.store.SetRecipientLanguage(ctx, channel, recipient(chatID), c.t.Code); err != nil {
+		b.log.Warn("remember language failed", "err", err)
+	}
+	return c
+}
+
+// languageOf is a person's stored language, or nil if they have none.
+func (b *Bot) languageOf(ctx context.Context, rcpt string) *texts {
+	code, err := b.store.RecipientLanguage(ctx, channel, rcpt)
+	if err != nil {
+		b.log.Warn("read language failed", "err", err)
+	}
+	return languages[code]
+}
+
 func (b *Bot) onMessage(ctx context.Context, m *telegram.Message) {
 	// Alerts are personal, and a group would expose every member's places.
 	if m.Chat.Type != "private" {
 		return
 	}
-	chat := m.Chat.ID
+	c := b.converse(ctx, m.Chat.ID, m.From)
 	if m.Location != nil {
-		b.onLocation(ctx, chat, m.Location.Latitude, m.Location.Longitude)
+		b.onLocation(ctx, c, m.Location.Latitude, m.Location.Longitude)
 		return
 	}
 	text := strings.TrimSpace(m.Text)
 	// A command wins even as a reply to a naming question, so /status still
 	// works from the reply box that question opens.
 	if cmd := command(text); cmd != "" {
-		b.onCommand(ctx, chat, cmd)
+		b.onCommand(ctx, c, cmd)
 		return
 	}
 	if label, ok := renameTarget(m.ReplyToMessage); ok {
-		b.rename(ctx, chat, label, text)
+		b.rename(ctx, c, label, text)
 		return
 	}
 	if lat, lng, ok := parseCoords(text); ok {
-		b.onLocation(ctx, chat, lat, lng)
+		b.onLocation(ctx, c, lat, lng)
 		return
 	}
-	b.send(ctx, chat, "Send me a location to watch, or see /help.", locationKeyboard)
+	b.send(ctx, c, c.t.Hint, locationKeyboard(c.t))
 }
 
-func (b *Bot) onCommand(ctx context.Context, chat int64, cmd string) {
+func (b *Bot) onCommand(ctx context.Context, c conversation, cmd string) {
 	switch cmd {
 	case "/start", "/help":
-		b.send(ctx, chat, welcomeText, locationKeyboard)
+		b.send(ctx, c, c.t.Welcome+"\n\n"+c.t.Disclaimer, locationKeyboard(c.t))
 	case "/status":
-		b.statusAll(ctx, chat)
+		b.statusAll(ctx, c)
 	case "/places":
-		b.places(ctx, chat)
-	case "/stop":
-		b.send(ctx, chat, "This stops all alerts and deletes your places. Are you sure?", telegram.InlineKeyboard{
+		b.places(ctx, c)
+	case "/language":
+		b.send(ctx, c, c.t.LanguagePrompt, telegram.InlineKeyboard{
 			InlineKeyboard: [][]telegram.InlineButton{{
-				{Text: "Delete everything", CallbackData: "stop:yes"},
-				{Text: "Cancel", CallbackData: "stop:no"},
+				{Text: "🇹🇭 ไทย", CallbackData: "lang:" + thai.Code},
+				{Text: "🇬🇧 English", CallbackData: "lang:" + english.Code},
+			}},
+		})
+	case "/stop":
+		b.send(ctx, c, c.t.StopConfirm, telegram.InlineKeyboard{
+			InlineKeyboard: [][]telegram.InlineButton{{
+				{Text: c.t.DeleteEverything, CallbackData: "stop:yes"},
+				{Text: c.t.Cancel, CallbackData: "stop:no"},
 			}},
 		})
 	default:
-		b.send(ctx, chat, "Send me a location to watch, or see /help.", locationKeyboard)
+		b.send(ctx, c, c.t.Hint, locationKeyboard(c.t))
 	}
 }
 
@@ -240,25 +282,25 @@ func coords(lat, lng float64) string { return fmt.Sprintf("%.5f,%.5f", lat, lng)
 
 func round5(v float64) float64 { return math.Round(v*1e5) / 1e5 }
 
-func (b *Bot) onLocation(ctx context.Context, chat int64, lat, lng float64) {
+func (b *Bot) onLocation(ctx context.Context, c conversation, lat, lng float64) {
 	lat, lng = round5(lat), round5(lng)
-	candidate, err := b.eval.Status(ctx, alert.Subscription{Channel: channel, Recipient: recipient(chat), Lat: lat, Lng: lng, RadiusM: defaultRadiusM})
+	candidate, err := b.eval.Status(ctx, alert.Subscription{Channel: channel, Recipient: recipient(c.id), Lat: lat, Lng: lng, RadiusM: defaultRadiusM})
 	if err != nil {
-		b.fail(ctx, chat, "check a location", err)
+		b.fail(ctx, c, "check a location", err)
 		return
 	}
 	if !covered(candidate.Findings) {
-		b.send(ctx, chat, notCoveredText, nil)
+		b.send(ctx, c, c.t.NotCovered, nil)
 		return
 	}
 
-	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(chat))
+	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(c.id))
 	if err != nil {
-		b.fail(ctx, chat, "list places", err)
+		b.fail(ctx, c, "list places", err)
 		return
 	}
 	if len(places) == 0 {
-		b.savePlace(ctx, chat, "Home", lat, lng)
+		b.savePlace(ctx, c, c.t.DefaultHome, lat, lng)
 		return
 	}
 
@@ -266,36 +308,34 @@ func (b *Bot) onLocation(ctx context.Context, chat int64, lat, lng float64) {
 	labels := make([]string, len(places))
 	for i, p := range places {
 		labels[i] = esc(p.Label)
-		rows = append(rows, []telegram.InlineButton{{Text: "Move " + p.Label + " here", CallbackData: fmt.Sprintf("mv:%d:%s", p.ID, coords(lat, lng))}})
+		rows = append(rows, []telegram.InlineButton{{Text: c.t.MoveHere(p.Label), CallbackData: fmt.Sprintf("mv:%d:%s", p.ID, coords(lat, lng))}})
 	}
 	if len(places) < store.MaxPlaces {
-		rows = append(rows, []telegram.InlineButton{{Text: "Add as a new place", CallbackData: "add:" + coords(lat, lng)}})
+		rows = append(rows, []telegram.InlineButton{{Text: c.t.AddNew, CallbackData: "add:" + coords(lat, lng)}})
 	}
-	b.send(ctx, chat, "You already watch "+strings.Join(labels, ", ")+". What should I do with this location?",
-		telegram.InlineKeyboard{InlineKeyboard: rows})
+	b.send(ctx, c, c.t.AlreadyWatch(strings.Join(labels, ", ")), telegram.InlineKeyboard{InlineKeyboard: rows})
 }
 
 // savePlace reports whether the place was saved and its status delivered.
-func (b *Bot) savePlace(ctx context.Context, chat int64, label string, lat, lng float64) (alert.Subscription, bool) {
+func (b *Bot) savePlace(ctx context.Context, c conversation, label string, lat, lng float64) (alert.Subscription, bool) {
 	sub, err := b.store.SaveSubscription(ctx, alert.Subscription{
-		Channel: channel, Recipient: recipient(chat), Label: label, Lat: lat, Lng: lng, RadiusM: defaultRadiusM,
+		Channel: channel, Recipient: recipient(c.id), Label: label, Lat: lat, Lng: lng, RadiusM: defaultRadiusM,
 	})
 	if errors.Is(err, store.ErrTooManyPlaces) {
-		b.send(ctx, chat, fmt.Sprintf("You can watch up to %d places. Remove one with /places first.", store.MaxPlaces), nil)
+		b.send(ctx, c, c.t.TooManyPlaces(store.MaxPlaces), nil)
 		return sub, false
 	}
 	if err != nil {
-		b.fail(ctx, chat, "save a place", err)
+		b.fail(ctx, c, "save a place", err)
 		return sub, false
 	}
 
 	a, err := b.eval.Status(ctx, sub)
 	if err != nil {
-		b.fail(ctx, chat, "read the gauges", err)
+		b.fail(ctx, c, "read the gauges", err)
 		return sub, false
 	}
-	intro := fmt.Sprintf("Watching <b>%s</b>. I'll message you when its flood risk changes.\n\n", esc(sub.Label))
-	if !b.send(ctx, chat, intro+statusText(sub, a, b.now()), mapButton(sub)) {
+	if !b.send(ctx, c, c.t.Watching(esc(sub.Label))+statusText(c.t, sub, a, b.now()), mapButton(c.t, sub)) {
 		return sub, false
 	}
 	// The subscriber has just seen all of this; without a baseline the next
@@ -306,30 +346,38 @@ func (b *Bot) savePlace(ctx context.Context, chat int64, label string, lat, lng 
 	return sub, true
 }
 
-func (b *Bot) statusAll(ctx context.Context, chat int64) {
-	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(chat))
+func (b *Bot) statusAll(ctx context.Context, c conversation) {
+	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(c.id))
 	if err != nil {
-		b.fail(ctx, chat, "list places", err)
+		b.fail(ctx, c, "list places", err)
 		return
 	}
 	if len(places) == 0 {
-		b.send(ctx, chat, "You're not watching anywhere yet. Send me a location to start.", locationKeyboard)
+		b.send(ctx, c, c.t.NoPlaces, locationKeyboard(c.t))
 		return
 	}
 	for _, p := range places {
 		a, err := b.eval.Status(ctx, p)
 		if err != nil {
-			b.fail(ctx, chat, "read the gauges", err)
+			b.fail(ctx, c, "read the gauges", err)
 			return
 		}
-		b.send(ctx, chat, statusText(p, a, b.now()), mapButton(p))
+		b.send(ctx, c, statusText(c.t, p, a, b.now()), mapButton(c.t, p))
 	}
 }
 
-func mapButton(sub alert.Subscription) telegram.InlineKeyboard {
+func mapButton(t *texts, sub alert.Subscription) telegram.InlineKeyboard {
 	return telegram.InlineKeyboard{InlineKeyboard: [][]telegram.InlineButton{{
-		{Text: "📍 Show gauges on map", CallbackData: fmt.Sprintf("map:%d", sub.ID)},
+		{Text: t.MapButton, CallbackData: fmt.Sprintf("map:%d", sub.ID)},
 	}}}
+}
+
+func locationKeyboard(t *texts) telegram.ReplyKeyboard {
+	return telegram.ReplyKeyboard{
+		Keyboard:        [][]telegram.KeyboardButton{{{Text: t.ShareLocation, RequestLocation: true}}},
+		ResizeKeyboard:  true,
+		OneTimeKeyboard: true,
+	}
 }
 
 // Pins beyond these add clutter without changing the picture.
@@ -343,54 +391,54 @@ type pin struct {
 // mapPins are a place and the gauges its risk is judged from. Telegram cannot
 // show a drawn map inside a message, but venues open in the phone's own maps
 // app with no server of ours involved.
-func mapPins(place alert.Subscription, a alert.Assessment) []pin {
-	pins := []pin{{place.Lat, place.Lng, "📍 " + place.Label, "Your place"}}
+func mapPins(t *texts, place alert.Subscription, a alert.Assessment) []pin {
+	pins := []pin{{place.Lat, place.Lng, "📍 " + place.Label, t.PinPlace}}
 	water := 0
 	for _, f := range a.Findings {
 		switch {
 		case f.Rule == alert.RuleWaterLevel && water < maxWaterPins:
 			water++
-			reading := "no data since " + clock(f.At)
+			reading := t.PinNoData(t.Clock(f.At))
 			if f.Known {
-				reading = bankText(f.LevelMSL, f.BankMSL) + " at " + clock(f.At)
+				reading = t.PinReading(t.Bank(f.LevelMSL, f.BankMSL), t.Clock(f.At))
 			}
-			pins = append(pins, pin{f.Station.Lat, f.Station.Lng, "🌊 " + f.Station.Name,
-				fmt.Sprintf("%s from %s · %s", distance(f.DistanceM), place.Label, reading)})
+			pins = append(pins, pin{f.Station.Lat, f.Station.Lng, "🌊 " + t.stationName(f.Station),
+				t.PinWater(t.Distance(f.DistanceM), place.Label, reading)})
 		case f.Rule == alert.RuleRain && f.Known:
-			pins = append(pins, pin{f.Station.Lat, f.Station.Lng, "🌧️ " + f.Station.Name,
-				fmt.Sprintf("%s from %s · wettest nearby, %s at %s", distance(f.DistanceM), place.Label, rainAmounts(f), clock(f.At))})
+			pins = append(pins, pin{f.Station.Lat, f.Station.Lng, "🌧️ " + t.stationName(f.Station),
+				t.PinRain(t.Distance(f.DistanceM), place.Label, rainAmounts(t, f), t.Clock(f.At))})
 		}
 	}
 	return pins
 }
 
-func (b *Bot) showMap(ctx context.Context, chat int64, place alert.Subscription) {
+func (b *Bot) showMap(ctx context.Context, c conversation, place alert.Subscription) {
 	a, err := b.eval.Status(ctx, place)
 	if err != nil {
-		b.fail(ctx, chat, "read the gauges", err)
+		b.fail(ctx, c, "read the gauges", err)
 		return
 	}
-	for _, p := range mapPins(place, a) {
-		err := b.api.SendVenue(ctx, chat, p.lat, p.lng, p.title, p.address)
+	for _, p := range mapPins(c.t, place, a) {
+		err := b.api.SendVenue(ctx, c.id, p.lat, p.lng, p.title, p.address)
 		if telegram.Blocked(err) {
-			b.forgetBlocked(ctx, recipient(chat))
+			b.forgetBlocked(ctx, recipient(c.id))
 			return
 		}
 		if err != nil {
-			b.log.Warn("send map pin failed", "chat", chat, "err", err)
+			b.log.Warn("send map pin failed", "chat", c.id, "err", err)
 			return
 		}
 	}
 }
 
-func (b *Bot) places(ctx context.Context, chat int64) {
-	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(chat))
+func (b *Bot) places(ctx context.Context, c conversation) {
+	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(c.id))
 	if err != nil {
-		b.fail(ctx, chat, "list places", err)
+		b.fail(ctx, c, "list places", err)
 		return
 	}
 	if len(places) == 0 {
-		b.send(ctx, chat, "You're not watching anywhere yet. Send me a location to start.", locationKeyboard)
+		b.send(ctx, c, c.t.NoPlaces, locationKeyboard(c.t))
 		return
 	}
 	var lines []string
@@ -398,12 +446,11 @@ func (b *Bot) places(ctx context.Context, chat int64) {
 	for _, p := range places {
 		lines = append(lines, fmt.Sprintf("• <b>%s</b> (%s)", esc(p.Label), coords(p.Lat, p.Lng)))
 		rows = append(rows, []telegram.InlineButton{
-			{Text: "Rename " + p.Label, CallbackData: fmt.Sprintf("rn:%d", p.ID)},
-			{Text: "Remove " + p.Label, CallbackData: fmt.Sprintf("rm:%d", p.ID)},
+			{Text: c.t.RenameButton(p.Label), CallbackData: fmt.Sprintf("rn:%d", p.ID)},
+			{Text: c.t.RemoveButton(p.Label), CallbackData: fmt.Sprintf("rm:%d", p.ID)},
 		})
 	}
-	text := "Your places:\n" + strings.Join(lines, "\n") + "\n\nSend a location to add a place or move one."
-	b.send(ctx, chat, text, telegram.InlineKeyboard{InlineKeyboard: rows})
+	b.send(ctx, c, c.t.PlacesList(strings.Join(lines, "\n")), telegram.InlineKeyboard{InlineKeyboard: rows})
 }
 
 func (b *Bot) onCallback(ctx context.Context, cq *telegram.CallbackQuery) {
@@ -413,7 +460,8 @@ func (b *Bot) onCallback(ctx context.Context, cq *telegram.CallbackQuery) {
 	if cq.Message == nil || cq.Message.Chat.Type != "private" {
 		return
 	}
-	chat, prompt := cq.Message.Chat.ID, cq.Message.MessageID
+	c := b.converse(ctx, cq.Message.Chat.ID, cq.From)
+	prompt := cq.Message.MessageID
 	action, arg, _ := strings.Cut(cq.Data, ":")
 
 	switch action {
@@ -422,15 +470,15 @@ func (b *Bot) onCallback(ctx context.Context, cq *telegram.CallbackQuery) {
 		if !ok {
 			return
 		}
-		places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(chat))
+		places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(c.id))
 		if err != nil {
-			b.fail(ctx, chat, "list places", err)
+			b.fail(ctx, c, "list places", err)
 			return
 		}
-		label := nextLabel(places)
-		b.edit(ctx, chat, prompt, "Adding <b>"+esc(label)+"</b>.")
-		if sub, ok := b.savePlace(ctx, chat, label, lat, lng); ok {
-			b.send(ctx, chat, renamePrompt(sub.Label), renameReply)
+		label := nextLabel(c.t, places)
+		b.edit(ctx, c, prompt, c.t.Adding(esc(label)))
+		if sub, ok := b.savePlace(ctx, c, label, lat, lng); ok {
+			b.send(ctx, c, c.t.RenamePrompt(esc(sub.Label)), renameReply(c.t))
 		}
 
 	case "mv":
@@ -439,58 +487,69 @@ func (b *Bot) onCallback(ctx context.Context, cq *telegram.CallbackQuery) {
 		if !ok {
 			return
 		}
-		place, ok := b.ownPlace(ctx, chat, ref)
+		place, ok := b.ownPlace(ctx, c, ref)
 		if !ok {
-			b.edit(ctx, chat, prompt, "That place is gone. Send the location again to add it.")
+			b.edit(ctx, c, prompt, c.t.PlaceGoneAdd)
 			return
 		}
-		b.edit(ctx, chat, prompt, "Moving <b>"+esc(place.Label)+"</b>.")
-		b.savePlace(ctx, chat, place.Label, lat, lng)
+		b.edit(ctx, c, prompt, c.t.Moving(esc(place.Label)))
+		b.savePlace(ctx, c, place.Label, lat, lng)
 
 	case "map":
-		place, ok := b.ownPlace(ctx, chat, arg)
+		place, ok := b.ownPlace(ctx, c, arg)
 		if !ok {
-			b.send(ctx, chat, "That place is gone. See /places.", nil)
+			b.send(ctx, c, c.t.PlaceGoneList, nil)
 			return
 		}
-		b.showMap(ctx, chat, place)
+		b.showMap(ctx, c, place)
 
 	case "rn":
-		place, ok := b.ownPlace(ctx, chat, arg)
+		place, ok := b.ownPlace(ctx, c, arg)
 		if !ok {
-			b.send(ctx, chat, "That place is gone. See /places.", nil)
+			b.send(ctx, c, c.t.PlaceGoneList, nil)
 			return
 		}
-		b.send(ctx, chat, renamePrompt(place.Label), renameReply)
+		b.send(ctx, c, c.t.RenamePrompt(esc(place.Label)), renameReply(c.t))
 
 	case "rm":
-		place, ok := b.ownPlace(ctx, chat, arg)
+		place, ok := b.ownPlace(ctx, c, arg)
 		if !ok {
-			b.edit(ctx, chat, prompt, "That place was already removed.")
+			b.edit(ctx, c, prompt, c.t.PlaceGone)
 			return
 		}
-		removed, err := b.store.RemoveSubscription(ctx, channel, recipient(chat), place.Label)
+		removed, err := b.store.RemoveSubscription(ctx, channel, recipient(c.id), place.Label)
 		if err != nil {
-			b.fail(ctx, chat, "remove a place", err)
+			b.fail(ctx, c, "remove a place", err)
 			return
 		}
 		if removed {
-			b.edit(ctx, chat, prompt, "Removed <b>"+esc(place.Label)+"</b>. No more alerts for it.")
+			b.edit(ctx, c, prompt, c.t.Removed(esc(place.Label)))
 		} else {
-			b.edit(ctx, chat, prompt, "<b>"+esc(place.Label)+"</b> was already removed.")
+			b.edit(ctx, c, prompt, c.t.AlreadyRemoved(esc(place.Label)))
 		}
+
+	case "lang":
+		t, ok := languages[arg]
+		if !ok {
+			return
+		}
+		if err := b.store.SetRecipientLanguage(ctx, channel, recipient(c.id), t.Code); err != nil {
+			b.fail(ctx, c, "set the language", err)
+			return
+		}
+		b.edit(ctx, conversation{id: c.id, t: t}, prompt, t.LanguageSet)
 
 	case "stop":
 		if arg != "yes" {
-			b.edit(ctx, chat, prompt, "Nothing was deleted.")
+			b.edit(ctx, c, prompt, c.t.NothingDeleted)
 			return
 		}
-		n, err := b.store.ForgetRecipient(ctx, channel, recipient(chat))
+		n, err := b.store.ForgetRecipient(ctx, channel, recipient(c.id))
 		if err != nil {
-			b.fail(ctx, chat, "delete your data", err)
+			b.fail(ctx, c, "delete your data", err)
 			return
 		}
-		b.edit(ctx, chat, prompt, fmt.Sprintf("Done. I deleted your %d %s and will not message you again. Send a location any time to start over.", n, plural(n, "place", "places")))
+		b.edit(ctx, c, prompt, c.t.Forgot(n))
 	}
 }
 
@@ -498,10 +557,10 @@ func (b *Bot) onCallback(ctx context.Context, cq *telegram.CallbackQuery) {
 // so a button can never touch someone else's. Buttons carry the place ID,
 // which stays within Telegram's 64-byte limit whatever the name; ones sent
 // before that carried the name itself.
-func (b *Bot) ownPlace(ctx context.Context, chat int64, ref string) (alert.Subscription, bool) {
-	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(chat))
+func (b *Bot) ownPlace(ctx context.Context, c conversation, ref string) (alert.Subscription, bool) {
+	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(c.id))
 	if err != nil {
-		b.fail(ctx, chat, "list places", err)
+		b.fail(ctx, c, "list places", err)
 		return alert.Subscription{}, false
 	}
 	id, err := strconv.ParseInt(ref, 10, 64)
@@ -515,122 +574,118 @@ func (b *Bot) ownPlace(ctx context.Context, chat int64, ref string) (alert.Subsc
 
 const maxLabelRunes = 30
 
-var (
-	renameReply   = telegram.ForceReply{ForceReply: true, InputFieldPlaceholder: "Office, Mum's house, ..."}
-	renamePattern = regexp.MustCompile(`^What should I call (.+)\? Reply with a name`)
-)
-
-func renamePrompt(label string) string {
-	return fmt.Sprintf("What should I call <b>%s</b>? Reply with a name, like Office or Mum's house.", esc(label))
+func renameReply(t *texts) telegram.ForceReply {
+	return telegram.ForceReply{ForceReply: true, InputFieldPlaceholder: t.RenamePlaceholder}
 }
 
+// The naming question as it was worded before it was translated, which may
+// still be answered from older chats.
+var legacyRenamePattern = regexp.MustCompile(`^What should I call (.+)\? Reply with a name`)
+
 // renameTarget recognises a reply to the bot's naming question and returns the
-// place it asked about. Telegram quotes that question back as plain text, so
-// the name is read from it and no conversation state has to be kept.
+// place it asked about. Telegram quotes that question back as plain text, and
+// in every language it opens with the marker and the place's name, so no
+// conversation state has to be kept.
 func renameTarget(replyTo *telegram.Message) (string, bool) {
 	if replyTo == nil || replyTo.From == nil || !replyTo.From.IsBot {
 		return "", false
 	}
-	m := renamePattern.FindStringSubmatch(replyTo.Text)
-	if m == nil {
-		return "", false
+	first, _, _ := strings.Cut(replyTo.Text, "\n")
+	if label, ok := strings.CutPrefix(first, renameMarker+" "); ok && label != "" {
+		return label, true
 	}
-	return m[1], true
+	if m := legacyRenamePattern.FindStringSubmatch(replyTo.Text); m != nil {
+		return m[1], true
+	}
+	return "", false
 }
 
-func (b *Bot) rename(ctx context.Context, chat int64, from, raw string) {
-	name, problem := cleanLabel(raw)
+func (b *Bot) rename(ctx context.Context, c conversation, from, raw string) {
+	name, problem := cleanLabel(c.t, raw)
 	if problem != "" {
-		b.send(ctx, chat, problem+" Tap Rename in /places to try again.", nil)
+		b.send(ctx, c, problem+" "+c.t.RenameRetry, nil)
 		return
 	}
-	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(chat))
+	places, err := b.store.RecipientSubscriptions(ctx, channel, recipient(c.id))
 	if err != nil {
-		b.fail(ctx, chat, "rename a place", err)
+		b.fail(ctx, c, "rename a place", err)
 		return
 	}
 	for _, p := range places {
 		if p.Label != from && strings.EqualFold(p.Label, name) {
-			b.send(ctx, chat, fmt.Sprintf("You already have a place called <b>%s</b>. Pick another name with /places.", esc(p.Label)), nil)
+			b.send(ctx, c, c.t.NameTaken(esc(p.Label)), nil)
 			return
 		}
 	}
 
-	renamed, err := b.store.RenameSubscription(ctx, channel, recipient(chat), from, name)
+	renamed, err := b.store.RenameSubscription(ctx, channel, recipient(c.id), from, name)
 	switch {
 	case errors.Is(err, store.ErrLabelTaken):
-		b.send(ctx, chat, fmt.Sprintf("You already have a place called <b>%s</b>. Pick another name with /places.", esc(name)), nil)
+		b.send(ctx, c, c.t.NameTaken(esc(name)), nil)
 	case err != nil:
-		b.fail(ctx, chat, "rename a place", err)
+		b.fail(ctx, c, "rename a place", err)
 	case !renamed:
-		b.send(ctx, chat, fmt.Sprintf("I couldn't find <b>%s</b> any more. See /places.", esc(from)), nil)
+		b.send(ctx, c, c.t.PlaceMissing(esc(from)), nil)
 	default:
-		b.send(ctx, chat, fmt.Sprintf("Renamed <b>%s</b> to <b>%s</b>.", esc(from), esc(name)), nil)
+		b.send(ctx, c, c.t.Renamed(esc(from), esc(name)), nil)
 	}
 }
 
 // cleanLabel tidies a name typed by a subscriber, or says what is wrong with it.
-func cleanLabel(raw string) (name, problem string) {
+func cleanLabel(t *texts, raw string) (name, problem string) {
 	name = strings.Join(strings.Fields(raw), " ")
 	switch {
 	case !strings.ContainsFunc(name, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }):
-		return "", "A name needs at least one letter or number."
+		return "", t.NameNeedsLetter
 	case utf8.RuneCountInString(name) > maxLabelRunes:
-		return "", fmt.Sprintf("Please keep names to %d characters or fewer.", maxLabelRunes)
+		return "", t.NameTooLong(maxLabelRunes)
 	case strings.ContainsFunc(name, unicode.IsControl):
-		return "", "That name has characters I can't use."
+		return "", t.NameBadChars
 	}
 	return name, ""
 }
 
-// nextLabel names a new place: Home first, then Place 2, Place 3 and so on,
-// reusing the lowest free number.
-func nextLabel(places []alert.Subscription) string {
+// nextLabel names a new place: Home first, then Place 2, Place 3 and so on in
+// the subscriber's language, reusing the lowest free number.
+func nextLabel(t *texts, places []alert.Subscription) string {
 	used := make([]string, len(places))
 	for i, p := range places {
 		used[i] = p.Label
 	}
-	if !slices.Contains(used, "Home") {
-		return "Home"
+	if !slices.Contains(used, t.DefaultHome) {
+		return t.DefaultHome
 	}
 	for n := 2; ; n++ {
-		if label := fmt.Sprintf("Place %d", n); !slices.Contains(used, label) {
+		if label := t.DefaultPlace(n); !slices.Contains(used, label) {
 			return label
 		}
 	}
 }
 
-func plural(n int64, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
-}
-
 // send reports whether the message was delivered. A recipient who blocked the
 // bot can never be reached again, so everything stored about them is deleted.
-func (b *Bot) send(ctx context.Context, chat int64, text string, markup any) bool {
-	err := b.api.SendMessage(ctx, telegram.OutgoingMessage{ChatID: chat, Text: text, ParseMode: "HTML", ReplyMarkup: markup})
+func (b *Bot) send(ctx context.Context, c conversation, text string, markup any) bool {
+	err := b.api.SendMessage(ctx, telegram.OutgoingMessage{ChatID: c.id, Text: text, ParseMode: "HTML", ReplyMarkup: markup})
 	switch {
 	case telegram.Blocked(err):
-		b.forgetBlocked(ctx, recipient(chat))
+		b.forgetBlocked(ctx, recipient(c.id))
 		return false
 	case err != nil:
-		b.log.Warn("send failed", "chat", chat, "err", err)
+		b.log.Warn("send failed", "chat", c.id, "err", err)
 		return false
 	}
 	return true
 }
 
-func (b *Bot) edit(ctx context.Context, chat, messageID int64, text string) {
-	if err := b.api.EditMessageText(ctx, chat, messageID, text, "HTML"); err != nil {
-		b.log.Debug("edit failed", "chat", chat, "err", err)
+func (b *Bot) edit(ctx context.Context, c conversation, messageID int64, text string) {
+	if err := b.api.EditMessageText(ctx, c.id, messageID, text, "HTML"); err != nil {
+		b.log.Debug("edit failed", "chat", c.id, "err", err)
 	}
 }
 
-func (b *Bot) fail(ctx context.Context, chat int64, doing string, err error) {
-	b.log.Error("request failed", "chat", chat, "doing", doing, "err", err)
-	b.send(ctx, chat, "Sorry, I couldn't "+doing+" just now. Please try again in a minute.", nil)
+func (b *Bot) fail(ctx context.Context, c conversation, doing string, err error) {
+	b.log.Error("request failed", "chat", c.id, "doing", doing, "err", err)
+	b.send(ctx, c, c.t.Failed, nil)
 }
 
 func (b *Bot) forgetBlocked(ctx context.Context, rcpt string) {
@@ -641,25 +696,3 @@ func (b *Bot) forgetBlocked(ctx context.Context, rcpt string) {
 	}
 	b.log.Info("recipient blocked the bot; their places were deleted", "places", n)
 }
-
-var locationKeyboard = telegram.ReplyKeyboard{
-	Keyboard:        [][]telegram.KeyboardButton{{{Text: "📍 Share my location", RequestLocation: true}}},
-	ResizeKeyboard:  true,
-	OneTimeKeyboard: true,
-}
-
-const welcomeText = `🌊 <b>FloodWatch BKK</b>
-
-I watch the canal and river gauges and rain gauges around places you choose, and message you when water nears a bank, rises fast, or rain gets heavy.
-
-<b>To start, send me a location</b>: tap the button below, or 📎 then Location. On a computer, paste coordinates like <code>13.6515, 100.4945</code>.
-
-/status  current readings near your places
-/places  list, rename or remove places (up to 5)
-/stop  stop alerts and delete your data
-
-I store only your chat ID and the locations you send. /stop deletes them.
-
-` + disclaimer
-
-const notCoveredText = "I can't watch that location: there's no working gauge within 10 km of it. FloodWatch covers Bangkok and the provinces around it."
