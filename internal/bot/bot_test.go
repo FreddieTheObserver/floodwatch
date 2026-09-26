@@ -506,7 +506,7 @@ func TestStatusOffersTheMap(t *testing.T) {
 	h.tap("map:1")
 	want := []string{
 		"📍 Home | Your place",
-		"🌊 Chao Phraya 15 | 5.4 km from Home · 1.82 m below the bank at 13:30",
+		"🌊 Chao Phraya 15 | 5.4 km from Home · 1.82 m below bank at 13:30",
 		"🌧️ Krung Thep 3 | 4.9 km from Home · wettest nearby, 0.5 mm in 1 h, 124 mm in 24 h at 13:30",
 	}
 	if strings.Join(h.api.venues, "\n") != strings.Join(want, "\n") {
