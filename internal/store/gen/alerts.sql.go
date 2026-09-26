@@ -137,7 +137,7 @@ func (q *Queries) ListAlertStates(ctx context.Context) ([]ListAlertStatesRow, er
 }
 
 const listStationsForAlerts = `-- name: ListStationsForAlerts :many
-SELECT id, source, kind, name, district, lat, lng, bank_msl
+SELECT id, source, kind, name, district, lat, lng, bank_msl, agency
   FROM stations
  ORDER BY id
 `
@@ -151,6 +151,7 @@ type ListStationsForAlertsRow struct {
 	Lat      float64
 	Lng      float64
 	BankMsl  *float64
+	Agency   *string
 }
 
 func (q *Queries) ListStationsForAlerts(ctx context.Context) ([]ListStationsForAlertsRow, error) {
@@ -171,6 +172,7 @@ func (q *Queries) ListStationsForAlerts(ctx context.Context) ([]ListStationsForA
 			&i.Lat,
 			&i.Lng,
 			&i.BankMsl,
+			&i.Agency,
 		); err != nil {
 			return nil, err
 		}

@@ -56,6 +56,7 @@ func bmaRainBatch(rows []bmaRainRow, now time.Time) Batch {
 			District:   firstNonEmpty(row.District),
 			Lat:        row.Lat.v,
 			Lng:        row.Lng.v,
+			Agency:     "BMA",
 		})
 
 		at, err := parseDotNetDate(row.Timestamp)

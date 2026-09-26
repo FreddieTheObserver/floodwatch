@@ -27,7 +27,11 @@ type thaiWaterGeocode struct {
 	Amphoe thaiWaterName `json:"amphoe_name"`
 }
 
-func (s thaiWaterStation) normalise(g thaiWaterGeocode, withBank bool) Station {
+type thaiWaterAgency struct {
+	ShortName thaiWaterName `json:"agency_shortname"`
+}
+
+func (s thaiWaterStation) normalise(g thaiWaterGeocode, a thaiWaterAgency, withBank bool) Station {
 	st := Station{
 		ExternalID: strconv.FormatInt(s.ID, 10),
 		Name:       firstNonEmpty(s.Name.EN, s.Name.TH),
@@ -35,6 +39,7 @@ func (s thaiWaterStation) normalise(g thaiWaterGeocode, withBank bool) Station {
 		District:   firstNonEmpty(g.Amphoe.EN, g.Amphoe.TH),
 		Lat:        s.Lat.v,
 		Lng:        s.Lng.v,
+		Agency:     firstNonEmpty(a.ShortName.EN, a.ShortName.TH),
 	}
 	if withBank {
 		st.BankMSL = s.MinBank.ptr()
@@ -77,6 +82,7 @@ type thaiWaterLevelResponse struct {
 		LevelMSL num              `json:"waterlevel_msl"`
 		Station  thaiWaterStation `json:"station"`
 		Geocode  thaiWaterGeocode `json:"geocode"`
+		Agency   thaiWaterAgency  `json:"agency"`
 	} `json:"data"`
 }
 
@@ -87,7 +93,7 @@ func (r thaiWaterLevelResponse) batch(now time.Time) Batch {
 			b.Skipped++
 			continue
 		}
-		st := row.Station.normalise(row.Geocode, true)
+		st := row.Station.normalise(row.Geocode, row.Agency, true)
 		b.Stations = append(b.Stations, st)
 
 		at, err := parseThaiWaterTime(row.DateTime)
@@ -128,6 +134,7 @@ type thaiWaterRainResponse struct {
 		Rain24h  num              `json:"rain_24h"`
 		Station  thaiWaterStation `json:"station"`
 		Geocode  thaiWaterGeocode `json:"geocode"`
+		Agency   thaiWaterAgency  `json:"agency"`
 	} `json:"data"`
 }
 
@@ -138,7 +145,7 @@ func (r thaiWaterRainResponse) batch(now time.Time) Batch {
 			b.Skipped++
 			continue
 		}
-		st := row.Station.normalise(row.Geocode, false)
+		st := row.Station.normalise(row.Geocode, row.Agency, false)
 		b.Stations = append(b.Stations, st)
 
 		at, err := parseThaiWaterTime(row.DateTime)

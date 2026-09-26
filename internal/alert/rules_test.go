@@ -228,6 +228,27 @@ func TestRainTakesWorstFreshGauge(t *testing.T) {
 	}
 }
 
+// The BMA's gauges started arriving through ThaiWater on 26 September 2026,
+// and its data must be credited whenever any of its gauges was used, not only
+// when one of them happened to be the wettest.
+func TestRainListsTheAgenciesOfFreshGauges(t *testing.T) {
+	gauge := func(id int64, km float64, agency string) Station {
+		st := north(id, source.KindRain, km, nil)
+		st.Agency = agency
+		return st
+	}
+	f := newFixture().
+		rain(gauge(11, 1, "HII"), RainPoint{At: now, Rain1h: mm(30)}).
+		rain(gauge(12, 2, "BMA"), RainPoint{At: now, Rain1h: mm(1)}).
+		rain(gauge(13, 3, "BMA"), RainPoint{At: now, Rain1h: mm(2)}).
+		rain(gauge(14, 4, "TMD"), RainPoint{At: now.Add(-4 * time.Hour), Rain1h: mm(0)}) // stale, so not used
+
+	got := find(t, Assess(f.snap, home, nil), 0, RuleRain)
+	if got.Station.ID != 11 || !slices.Equal(got.Agencies, []string{"HII", "BMA"}) {
+		t.Errorf("wettest %d, agencies %v; want 11 and [HII BMA]", got.Station.ID, got.Agencies)
+	}
+}
+
 // Seen on 26 September 2026: 124 mm over the day but 0.5 mm in the last hour.
 // The severity is right, but it must be attributed to the day, not the hour.
 func TestRainWindowNamesWhatSetTheSeverity(t *testing.T) {

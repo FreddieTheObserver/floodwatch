@@ -32,6 +32,9 @@ type Station struct {
 	District   string
 	Lat, Lng   float64
 	BankMSL    *float64
+	// Agency is the short name of the organisation that runs the gauge, which
+	// for a republishing feed like ThaiWater is not the feed itself.
+	Agency string
 }
 
 type WaterReading struct {

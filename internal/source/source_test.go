@@ -76,6 +76,10 @@ func TestThaiWaterLevels(t *testing.T) {
 	if thaiOnly.Name != "กรมชลประทานสามเสน" || thaiOnly.NameTH != thaiOnly.Name {
 		t.Errorf("thai-only station names = %q / %q", thaiOnly.Name, thaiOnly.NameTH)
 	}
+	// ThaiWater republishes other agencies' gauges; each keeps its owner.
+	if over.Agency != "HII" || thaiOnly.Agency != "RID" {
+		t.Errorf("agencies = %q / %q, want HII / RID", over.Agency, thaiOnly.Agency)
+	}
 
 	// The station with a null level is still known; only its reading is dropped.
 	if b.Stations[3].ExternalID != "999001" {
@@ -110,6 +114,9 @@ func TestThaiWaterRain(t *testing.T) {
 	if r.ExternalID != "2" || deref(r.Rain1h) != 3.0 || deref(r.Rain24h) != 198.2 || r.Rain3h != nil {
 		t.Errorf("reading = %+v 1h=%v 3h=%v 24h=%v", r, deref(r.Rain1h), deref(r.Rain3h), deref(r.Rain24h))
 	}
+	if b.Stations[1].Agency != "TMD" {
+		t.Errorf("agency = %q, want TMD", b.Stations[1].Agency)
+	}
 	if b.Rain[1].Rain1h != nil || deref(b.Rain[1].Rain24h) != 188.7 {
 		t.Errorf("reading without rain_1h = 1h=%v 24h=%v", deref(b.Rain[1].Rain1h), deref(b.Rain[1].Rain24h))
 	}
@@ -132,7 +139,7 @@ func TestBMARain(t *testing.T) {
 	}
 	st := b.Stations[0]
 	if st.ExternalID != "RF.TKU.01" || st.Name != "Thung Khru District Office" || st.District != "Thung Khru" ||
-		st.Lat != 13.61135 || st.Lng != 100.50878 {
+		st.Lat != 13.61135 || st.Lng != 100.50878 || st.Agency != "BMA" {
 		t.Errorf("station = %+v", st)
 	}
 	r := b.Rain[0]

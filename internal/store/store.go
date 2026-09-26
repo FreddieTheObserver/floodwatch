@@ -103,6 +103,7 @@ func (s *Store) SaveBatch(ctx context.Context, b source.Batch) (Saved, error) {
 				Lat:        st.Lat,
 				Lng:        st.Lng,
 				BankMsl:    st.BankMSL,
+				Agency:     optional(st.Agency),
 			})
 			if err != nil {
 				return fmt.Errorf("upsert station %s/%s/%s: %w", b.Source, b.Kind, st.ExternalID, err)

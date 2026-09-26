@@ -93,6 +93,7 @@ type Subscription struct {
 type Station struct {
 	ID       int64
 	Source   string
+	Agency   string
 	Kind     source.Kind
 	Name     string
 	District string
@@ -145,8 +146,10 @@ type Finding struct {
 	Rain1h, Rain3h, Rain24h *float64
 	// For rain, the window whose total set the severity; 0 when none did.
 	RainWindow time.Duration
-	// For area rules, how many watched gauges had fresh readings.
+	// For area rules, how many watched gauges had fresh readings, and the
+	// agencies running them, each of which is owed credit for its data.
 	FreshGauges int
+	Agencies    []string
 }
 
 // Change is a finding whose severity differs from what the subscriber was
@@ -317,13 +320,16 @@ func assessRain(snap Snapshot, sub Subscription, gauges []nearby, current map[Ke
 			continue
 		}
 		rain.FreshGauges++
+		if g.Agency != "" && !slices.Contains(rain.Agencies, g.Agency) {
+			rain.Agencies = append(rain.Agencies, g.Agency)
+		}
 		relaxed = max(relaxed, rainLevel(p, rainHysteresis))
 		raw := rainLevel(p, 1)
 		if raw > worstRaw || (raw == worstRaw && wetter(p, worstPoint)) {
 			worst, worstPoint, worstRaw = g, p, raw
 		}
 	}
-	stale.FreshGauges = rain.FreshGauges
+	stale.FreshGauges, stale.Agencies = rain.FreshGauges, rain.Agencies
 	stale.Known = true
 	if rain.FreshGauges == 0 {
 		stale.Severity = SeverityWatch

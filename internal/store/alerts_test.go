@@ -35,7 +35,7 @@ func TestReadingsForAlerts(t *testing.T) {
 	}
 	rain := source.Batch{
 		Source: "thaiwater", Kind: source.KindRain,
-		Stations: []source.Station{{ExternalID: "2", Name: "Krung Thep 8", Lat: 13.76, Lng: 100.64}},
+		Stations: []source.Station{{ExternalID: "2", Name: "Krung Thep 8", Lat: 13.76, Lng: 100.64, Agency: "BMA"}},
 		Rain: []source.RainReading{
 			{ExternalID: "2", ObservedAt: t0, Rain24h: ptr(150)},
 			{ExternalID: "2", ObservedAt: t0.Add(time.Hour), Rain1h: ptr(3), Rain24h: ptr(198.2)},
@@ -59,6 +59,9 @@ func TestReadingsForAlerts(t *testing.T) {
 			}
 		case source.KindRain:
 			rainID = st.ID
+			if st.Agency != "BMA" {
+				t.Errorf("rain station agency = %q, want BMA", st.Agency)
+			}
 		}
 	}
 

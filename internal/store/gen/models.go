@@ -39,6 +39,7 @@ type Station struct {
 	BankMsl     *float64
 	FirstSeenAt time.Time
 	LastSeenAt  time.Time
+	Agency      *string
 }
 
 type Subscription struct {

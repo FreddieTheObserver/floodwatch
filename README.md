@@ -46,9 +46,10 @@ Water gauges are sparse, so for many districts the nearest one is several kilome
 | Source | What | Status |
 | --- | --- | --- |
 | [ThaiWater](https://www.thaiwater.net/) (Hydro-Informatics Institute) | water level and rain gauges for Bangkok and the five surrounding provinces | in use |
-| [BMA Drainage and Sewerage Department](https://weather.bangkok.go.th/) | 125 rain gauges across Bangkok | off until the department permits automated access; requested 26 September 2026 |
+| [BMA Drainage and Sewerage Department](https://weather.bangkok.go.th/) | about 120 rain gauges across Bangkok | used as republished by ThaiWater since 26 September 2026, credited to the department; polling its own site stays off until it permits automated access |
 
 ThaiWater publishes rain hourly and about an hour late, so rain alerts can trail real rainfall by one to two hours.
+Every gauge records the agency that runs it, and any message drawing on BMA gauges credits the department.
 The collector identifies itself in its User-Agent, polls sources one at a time, and backs off a failing source up to once an hour.
 
 ## Running it

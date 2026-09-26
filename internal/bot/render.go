@@ -118,10 +118,16 @@ func joinNonEmpty(sep string, parts ...string) string {
 
 func footer(findings []alert.Finding, checked time.Time) string {
 	lines := []string{"Readings from ThaiWater (HII), checked " + clock(checked) + "."}
-	if slices.ContainsFunc(findings, func(f alert.Finding) bool { return f.Station.Source == "bma" }) {
+	if slices.ContainsFunc(findings, usesBMAData) {
 		lines = append(lines, bmaCredit)
 	}
 	return strings.Join(append(lines, disclaimer), "\n")
+}
+
+// usesBMAData reports whether a finding drew on BMA gauges, whether fetched
+// from the BMA directly or republished through ThaiWater.
+func usesBMAData(f alert.Finding) bool {
+	return f.Station.Source == "bma" || f.Station.Agency == "BMA" || slices.Contains(f.Agencies, "BMA")
 }
 
 // digestText renders one place's changes, worst news first and recoveries last.

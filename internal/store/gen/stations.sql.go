@@ -10,10 +10,10 @@ import (
 )
 
 const upsertStation = `-- name: UpsertStation :one
-INSERT INTO stations (source, kind, external_id, name, name_th, district, lat, lng, bank_msl)
+INSERT INTO stations (source, kind, external_id, name, name_th, district, lat, lng, bank_msl, agency)
 VALUES ($1, $2, $3, $4,
         $5, $6, $7, $8,
-        $9)
+        $9, $10)
 ON CONFLICT (source, kind, external_id) DO UPDATE
    SET name         = EXCLUDED.name,
        name_th      = EXCLUDED.name_th,
@@ -21,6 +21,7 @@ ON CONFLICT (source, kind, external_id) DO UPDATE
        lat          = EXCLUDED.lat,
        lng          = EXCLUDED.lng,
        bank_msl     = COALESCE(EXCLUDED.bank_msl, stations.bank_msl),
+       agency       = COALESCE(EXCLUDED.agency, stations.agency),
        last_seen_at = now()
 RETURNING id
 `
@@ -35,6 +36,7 @@ type UpsertStationParams struct {
 	Lat        float64
 	Lng        float64
 	BankMsl    *float64
+	Agency     *string
 }
 
 // A feed that briefly omits the bank level must not switch off the overflow
@@ -50,6 +52,7 @@ func (q *Queries) UpsertStation(ctx context.Context, arg UpsertStationParams) (i
 		arg.Lat,
 		arg.Lng,
 		arg.BankMsl,
+		arg.Agency,
 	)
 	var id int64
 	err := row.Scan(&id)

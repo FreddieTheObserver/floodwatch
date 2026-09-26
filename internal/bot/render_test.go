@@ -64,6 +64,18 @@ func TestDigestCreditsBMAWhenItsDataIsUsed(t *testing.T) {
 	}
 }
 
+func TestStatusCreditsBMAGaugesRepublishedByThaiWater(t *testing.T) {
+	findings := sampleFindings()
+	if text := statusText(alert.Subscription{Label: "Home"}, findings, checked); strings.Contains(text, bmaCredit) {
+		t.Errorf("BMA credited though only HII gauges were used:\n%s", text)
+	}
+	// Not the wettest gauge, but among those judged, which is still using it.
+	findings[3].Agencies = []string{"HII", "BMA"}
+	if text := statusText(alert.Subscription{Label: "Home"}, findings, checked); !strings.Contains(text, bmaCredit) {
+		t.Errorf("no BMA credit though BMA gauges were used:\n%s", text)
+	}
+}
+
 func TestNamesAreEscaped(t *testing.T) {
 	d := alert.Digest{
 		Subscription: alert.Subscription{Label: "Mum & Dad's"},

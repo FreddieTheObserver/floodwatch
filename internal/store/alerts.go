@@ -36,6 +36,7 @@ func (s *Store) ListStations(ctx context.Context) ([]alert.Station, error) {
 		out[i] = alert.Station{
 			ID: r.ID, Source: r.Source, Kind: source.Kind(r.Kind), Name: r.Name,
 			District: deref(r.District), Lat: r.Lat, Lng: r.Lng, BankMSL: r.BankMsl,
+			Agency: deref(r.Agency),
 		}
 	}
 	return out, nil
