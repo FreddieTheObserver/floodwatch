@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/FreddieTheObserver/floodwatch/internal/telegram"
@@ -9,17 +10,20 @@ import (
 
 // Notify delivers every pending alert digest. It runs after each collector
 // poll. A digest is acknowledged only once Telegram accepts it, so one that
-// fails is simply produced again after the next poll.
-func (b *Bot) Notify(ctx context.Context) {
+// fails is simply produced again after the next poll. The error says whether
+// alerting as a whole is broken, as opposed to one message not getting
+// through.
+func (b *Bot) Notify(ctx context.Context) error {
 	digests, err := b.eval.Evaluate(ctx)
 	if err != nil {
 		b.log.Error("evaluate alerts failed", "err", err)
-		return
+		return fmt.Errorf("evaluate alerts: %w", err)
 	}
 	var sent, failed int
+	var lastErr error
 	for _, d := range digests {
 		if ctx.Err() != nil {
-			return
+			return nil
 		}
 		chat, err := strconv.ParseInt(d.Subscription.Recipient, 10, 64)
 		if err != nil {
@@ -33,6 +37,7 @@ func (b *Bot) Notify(ctx context.Context) {
 			continue
 		case err != nil:
 			failed++
+			lastErr = err
 			b.log.Warn("alert not delivered; will retry after the next poll", "subscription", d.Subscription.ID, "err", err)
 			continue
 		}
@@ -44,4 +49,8 @@ func (b *Bot) Notify(ctx context.Context) {
 	if sent+failed > 0 {
 		b.log.Info("alerts delivered", "sent", sent, "failed", failed)
 	}
+	if failed > 0 && sent == 0 {
+		return fmt.Errorf("none of %d alerts could be delivered: %w", failed, lastErr)
+	}
+	return nil
 }

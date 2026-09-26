@@ -134,11 +134,12 @@ func (s *fakeStore) ForgetRecipient(_ context.Context, _, rcpt string) (int64, e
 type fakeEval struct {
 	assessment alert.Assessment
 	pending    []alert.Digest
+	evalErr    error
 	acked      []int64
 	baselined  []alert.Subscription
 }
 
-func (e *fakeEval) Evaluate(context.Context) ([]alert.Digest, error) { return e.pending, nil }
+func (e *fakeEval) Evaluate(context.Context) ([]alert.Digest, error) { return e.pending, e.evalErr }
 func (e *fakeEval) Ack(_ context.Context, d alert.Digest) error {
 	e.acked = append(e.acked, d.Subscription.ID)
 	return nil
@@ -487,7 +488,10 @@ func TestNotifyAcknowledgesOnlyWhatWasDelivered(t *testing.T) {
 	h.api.sendErr[43] = errors.New("timeout")
 	h.api.sendErr[44] = &telegram.APIError{Code: 403, Description: "Forbidden: bot was blocked by the user"}
 
-	h.bot.Notify(context.Background())
+	// One of three getting through is not alerting being broken.
+	if err := h.bot.Notify(context.Background()); err != nil {
+		t.Errorf("notify = %v, want nil with one alert delivered", err)
+	}
 
 	if len(h.eval.acked) != 1 || h.eval.acked[0] != 1 {
 		t.Errorf("acked = %v, want only the delivered digest", h.eval.acked)
@@ -511,6 +515,36 @@ func TestStatusOffersTheMap(t *testing.T) {
 	}
 	if strings.Join(h.api.venues, "\n") != strings.Join(want, "\n") {
 		t.Errorf("pins:\n%s\nwant:\n%s", strings.Join(h.api.venues, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestNotifyReportsBrokenAlerting(t *testing.T) {
+	h := newHarness()
+	h.eval.evalErr = errors.New("database is down")
+	if err := h.bot.Notify(context.Background()); err == nil || !strings.Contains(err.Error(), "database is down") {
+		t.Errorf("evaluation failure = %v, want it reported", err)
+	}
+
+	h = newHarness()
+	h.eval.pending = []alert.Digest{{Subscription: alert.Subscription{ID: 1, Recipient: "42", Label: "Home"}, Assessment: sampleAssessment()}}
+	h.api.sendErr[42] = errors.New("telegram unreachable")
+	if err := h.bot.Notify(context.Background()); err == nil || !strings.Contains(err.Error(), "none of 1 alerts") {
+		t.Errorf("no alert delivered = %v, want it reported", err)
+	}
+}
+
+func TestHealthyTracksContactWithTelegram(t *testing.T) {
+	h := newHarness()
+	if err := h.bot.Healthy(); err != nil {
+		t.Errorf("before Run = %v, want healthy", err)
+	}
+	h.bot.lastContact.Store(checked.Add(-2 * time.Minute).UnixNano())
+	if err := h.bot.Healthy(); err != nil {
+		t.Errorf("2 minutes of silence = %v, want healthy", err)
+	}
+	h.bot.lastContact.Store(checked.Add(-12 * time.Minute).UnixNano())
+	if err := h.bot.Healthy(); err == nil || !strings.Contains(err.Error(), "12m") {
+		t.Errorf("12 minutes of silence = %v, want it reported", err)
 	}
 }
 

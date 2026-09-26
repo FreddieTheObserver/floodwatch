@@ -3,6 +3,7 @@ package collect
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -41,14 +42,31 @@ func New(fetchers []source.Fetcher, saver Saver, log *slog.Logger, interval, fet
 	return c
 }
 
+// PollResult is the outcome of one poll, for judging whether collection works.
+type PollResult struct {
+	Sources, Failed, BackingOff int
+	Saved                       store.Saved
+}
+
+// Healthy reports whether any source delivered. A source backing off counts
+// as failing, since it is only skipped because it kept failing.
+func (r PollResult) Healthy() bool {
+	return r.Sources == 0 || r.Failed+r.BackingOff < r.Sources
+}
+
+func (r PollResult) String() string {
+	return fmt.Sprintf("sources %d, failed %d, backing off %d, new water readings %d, new rain readings %d",
+		r.Sources, r.Failed, r.BackingOff, r.Saved.Water, r.Saved.Rain)
+}
+
 // Run polls once straight away, then on every tick until ctx is done, calling
 // afterPoll (if not nil) once each poll's readings are saved. A tick that comes
 // due while a poll is still running is dropped, not queued.
-func (c *Collector) Run(ctx context.Context, afterPoll func(context.Context)) {
+func (c *Collector) Run(ctx context.Context, afterPoll func(context.Context, PollResult)) {
 	poll := func() {
-		c.Poll(ctx)
+		r := c.Poll(ctx)
 		if afterPoll != nil && ctx.Err() == nil {
-			afterPoll(ctx)
+			afterPoll(ctx, r)
 		}
 	}
 	poll()
@@ -66,32 +84,32 @@ func (c *Collector) Run(ctx context.Context, afterPoll func(context.Context)) {
 
 // Poll fetches every source once. Sources run one after another so the public
 // servers never see a burst, and a failing source never blocks the others.
-func (c *Collector) Poll(ctx context.Context) {
+func (c *Collector) Poll(ctx context.Context) PollResult {
 	start := time.Now()
-	var total store.Saved
-	var failed, backingOff int
+	r := PollResult{Sources: len(c.sources)}
 	for _, s := range c.sources {
 		if ctx.Err() != nil {
-			return
+			return r
 		}
 		if s.skips > 0 {
 			s.skips--
-			backingOff++
+			r.BackingOff++
 			continue
 		}
 		saved, err := c.collect(ctx, s)
 		if err != nil {
-			failed++
+			r.Failed++
 			continue
 		}
-		total.Stations += saved.Stations
-		total.Water += saved.Water
-		total.Rain += saved.Rain
+		r.Saved.Stations += saved.Stations
+		r.Saved.Water += saved.Water
+		r.Saved.Rain += saved.Rain
 	}
 	c.log.Info("poll done",
-		"sources", len(c.sources), "failed", failed, "backing_off", backingOff,
-		"stations", total.Stations, "new_water", total.Water, "new_rain", total.Rain,
+		"sources", r.Sources, "failed", r.Failed, "backing_off", r.BackingOff,
+		"stations", r.Saved.Stations, "new_water", r.Saved.Water, "new_rain", r.Saved.Rain,
 		"took", time.Since(start).Round(time.Millisecond).String())
+	return r
 }
 
 func (c *Collector) collect(ctx context.Context, s *sourceState) (store.Saved, error) {

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -59,6 +60,27 @@ type Bot struct {
 	eval  Evaluator
 	log   *slog.Logger
 	now   func() time.Time
+
+	// lastContact is when Telegram last answered a long poll, in Unix
+	// nanoseconds; zero while Run has not started. The poll loop writes it and
+	// the health check reads it from another goroutine.
+	lastContact atomic.Int64
+}
+
+// A long poll returns at least every pollTimeoutSeconds, so this long without
+// an answer means commands are no longer getting through.
+const maxSilence = 5 * time.Minute
+
+// Healthy reports whether the bot is still in contact with Telegram.
+func (b *Bot) Healthy() error {
+	last := b.lastContact.Load()
+	if last == 0 {
+		return nil
+	}
+	if silence := b.now().Sub(time.Unix(0, last)); silence > maxSilence {
+		return fmt.Errorf("no contact with Telegram for %s", silence.Round(time.Minute))
+	}
+	return nil
 }
 
 func New(api API, store Store, eval Evaluator, log *slog.Logger) *Bot {
@@ -84,6 +106,7 @@ func (b *Bot) Run(ctx context.Context) error {
 
 	var offset int64
 	delay := time.Second
+	b.lastContact.Store(b.now().UnixNano())
 	for ctx.Err() == nil {
 		pollCtx, cancel := context.WithTimeout(ctx, (pollTimeoutSeconds+15)*time.Second)
 		updates, err := b.api.GetUpdates(pollCtx, offset, pollTimeoutSeconds)
@@ -101,6 +124,7 @@ func (b *Bot) Run(ctx context.Context) error {
 			continue
 		}
 		delay = time.Second
+		b.lastContact.Store(b.now().UnixNano())
 		for _, u := range updates {
 			offset = u.UpdateID + 1
 			b.handle(ctx, u)

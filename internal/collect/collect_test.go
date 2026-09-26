@@ -108,6 +108,29 @@ func TestBackoffResetsAfterSuccess(t *testing.T) {
 	}
 }
 
+func TestPollResultHealth(t *testing.T) {
+	var poll int
+	failing := &scriptedFetcher{fail: func(int) bool { return true }, poll: &poll}
+	c := New([]source.Fetcher{failing}, &fakeSaver{}, quiet(), 10*time.Minute, time.Second)
+
+	if r := c.Poll(context.Background()); r.Healthy() || r.Failed != 1 {
+		t.Errorf("all sources failing = %+v, healthy %v", r, r.Healthy())
+	}
+	c.Poll(context.Background()) // second failure: the source now backs off
+	// Skipped only because it kept failing, so still unhealthy.
+	if r := c.Poll(context.Background()); r.Healthy() || r.BackingOff != 1 {
+		t.Errorf("all sources backing off = %+v, healthy %v", r, r.Healthy())
+	}
+
+	mixed := New([]source.Fetcher{
+		fakeFetcher{name: "ok", b: source.Batch{Source: "ok", Stations: []source.Station{{ExternalID: "1"}}}},
+		fakeFetcher{name: "down", err: errors.New("503")},
+	}, &fakeSaver{}, quiet(), 10*time.Minute, time.Second)
+	if r := mixed.Poll(context.Background()); !r.Healthy() {
+		t.Errorf("one source delivering = %+v, want healthy", r)
+	}
+}
+
 func TestRunCallsAfterPollOnceReadingsAreSaved(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -115,7 +138,7 @@ func TestRunCallsAfterPollOnceReadingsAreSaved(t *testing.T) {
 	fetchers := []source.Fetcher{fakeFetcher{name: "a", b: source.Batch{Source: "a", Stations: []source.Station{{ExternalID: "1"}}}}}
 
 	evaluated := make(chan int, 1)
-	go New(fetchers, saver, quiet(), time.Hour, time.Second).Run(ctx, func(context.Context) {
+	go New(fetchers, saver, quiet(), time.Hour, time.Second).Run(ctx, func(context.Context, PollResult) {
 		evaluated <- len(saver.saved)
 	})
 	select {
