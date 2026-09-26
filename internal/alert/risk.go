@@ -81,10 +81,13 @@ func Overall(findings []Finding, radiusM int) Risk {
 			continue
 		}
 		fresh = fresh || s.level.Known
-		c := candidate{discount(s.level.Severity, s.level, radiusM), s.level}
+		c := candidate{s.level.Severity, s.level}
 		if (s.rising.Known || s.rising.Held) && s.rising.Severity > SeverityNone {
 			c = candidate{min(c.level+1, SeveritySevere), s.rising}
 		}
+		// Distance is discounted last, so a rise far away cannot win back the
+		// level its distance costs it.
+		c.level = discount(c.level, c.driver, radiusM)
 		cands = append(cands, c)
 	}
 	if rain.Known || rain.Held {

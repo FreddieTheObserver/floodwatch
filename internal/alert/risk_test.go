@@ -52,6 +52,19 @@ func TestRisingFastNearTheBankRaisesTheRisk(t *testing.T) {
 	}
 }
 
+// Seen on 26 September 2026 at 17:40: Khlong Lat Bang Yo 1 Gate, 6.6 km from
+// Home, was 0.56 m over its bank on the evening tide and rising 26 cm/h. The
+// rise must not win back the level its distance costs it; applying the bump
+// after the discount made this HIGH instead of WARNING.
+func TestARiseBeyondTheRadiusStillCountsALevelLower(t *testing.T) {
+	gate := north(1, source.KindWater, 6.6, mm(1.51))
+	f := newFixture().water(gate, at(time.Hour, 1.81), at(0, 2.07))
+	got := risk(f, nil)
+	if got.Level != SeverityWarning || got.Drivers[0].Rule != RuleWaterRising {
+		t.Errorf("risk = %+v, want warning from the rising gate", got)
+	}
+}
+
 func TestRiskIsUnknownWithNoFreshData(t *testing.T) {
 	f := newFixture().
 		water(north(1, source.KindWater, 1, mm(2)), at(5*time.Hour, 0.5)).
