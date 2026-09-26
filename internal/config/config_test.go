@@ -25,6 +25,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.BMARain {
 		t.Error("BMA rain is on by default; it must stay off until permission is granted")
 	}
+	if want := []string{"N01", "N02", "N03", "N04", "N05"}; !slices.Equal(cfg.TideStations, want) {
+		t.Errorf("tide stations = %v, want %v", cfg.TideStations, want)
+	}
 }
 
 func TestLoadBMARain(t *testing.T) {
@@ -51,13 +54,14 @@ func TestLoadReportsEveryProblem(t *testing.T) {
 		"FLOODWATCH_PROVINCES":        "10,bangkok",
 		"FLOODWATCH_LOG_LEVEL":        "loud",
 		"FLOODWATCH_BMA_RAIN_ENABLED": "yes please",
+		"FLOODWATCH_TIDE_STATIONS":    "N02,../N03",
 	}))
 	if err == nil {
 		t.Fatal("want an error")
 	}
 	for _, name := range []string{
 		"FLOODWATCH_DSN", "FLOODWATCH_POLL_INTERVAL", "FLOODWATCH_FETCH_TIMEOUT",
-		"FLOODWATCH_PROVINCES", "FLOODWATCH_LOG_LEVEL", "FLOODWATCH_BMA_RAIN_ENABLED",
+		"FLOODWATCH_PROVINCES", "FLOODWATCH_LOG_LEVEL", "FLOODWATCH_BMA_RAIN_ENABLED", "FLOODWATCH_TIDE_STATIONS",
 	} {
 		if !strings.Contains(err.Error(), name) {
 			t.Errorf("error does not mention %s: %v", name, err)
