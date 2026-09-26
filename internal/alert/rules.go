@@ -345,6 +345,24 @@ func assessRain(snap Snapshot, sub Subscription, gauges []nearby, current map[Ke
 	return []Finding{rain, stale}
 }
 
+// RainThreshold is the total a window's rain must reach for a severity, so a
+// message can state the line a measurement crossed rather than a label.
+func RainThreshold(window time.Duration, severity int) (float64, bool) {
+	var thresholds []float64
+	switch window {
+	case time.Hour:
+		thresholds = rain1hThresholds
+	case 3 * time.Hour:
+		thresholds = rain3hThresholds
+	case 24 * time.Hour:
+		thresholds = rain24hThresholds
+	}
+	if severity < SeverityWatch || severity > len(thresholds) {
+		return 0, false
+	}
+	return thresholds[severity-1], true
+}
+
 func rainLevel(p RainPoint, factor float64) int {
 	level, _ := rainDriver(p, factor)
 	return level

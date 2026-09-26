@@ -131,7 +131,7 @@ func discount(severity int, f Finding, radiusM int) int {
 func overallTrend(drivers []Finding, rain Finding) Trend {
 	if len(drivers) == 0 {
 		if rain.Known && rain.Rain1h != nil && *rain.Rain1h >= trendMinRainMM {
-			return findingTrend(rain)
+			return FindingTrend(rain)
 		}
 		return TrendStable
 	}
@@ -141,7 +141,7 @@ func overallTrend(drivers []Finding, rain Finding) Trend {
 			continue // a held severity has no current readings to show a direction
 		}
 		judged++
-		switch findingTrend(d) {
+		switch FindingTrend(d) {
 		case TrendWorse:
 			return TrendWorse
 		case TrendBetter:
@@ -157,7 +157,9 @@ func overallTrend(drivers []Finding, rain Finding) Trend {
 	return TrendStable
 }
 
-func findingTrend(f Finding) Trend {
+// FindingTrend is which way one finding is heading, so a trend can be
+// explained by the reading behind it.
+func FindingTrend(f Finding) Trend {
 	if f.Rule == RuleRain {
 		return rainTrend(f)
 	}
