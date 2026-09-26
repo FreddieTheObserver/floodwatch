@@ -80,14 +80,31 @@ read -rsp 'Token: ' t && printf 'FLOODWATCH_TELEGRAM_TOKEN=%s\n' "$t" > .env && 
 ```
 
 ```sh
-make db-up    # Postgres 18 on localhost:5433
-make serve    # builds, applies migrations, then runs the collector and the bot
+make db-up    # Postgres 18 on localhost:5433, restarted by Docker if it stops
+make up       # the service, detached in tmux and restarted whenever it exits
+make down     # stops it
 ```
 
-`make run` does the same through `go run`.
-Both load `.env` if it exists.
+`make up` appends the service's output to `floodwatch.log`; `tmux attach -t floodwatch` shows it live.
+`make serve` runs the service once in the foreground, and `make run` does the same through `go run`.
+All of them load `.env` if it exists.
 Without a token the collector still runs, just without the bot.
 A token Telegram rejects stops the whole process, since collecting without ever alerting would look healthy while helping nobody.
+
+## Watchdog
+
+A process that has died cannot say so, and a silent bot looks exactly like a quiet day.
+So floodwatch reports to an outside watchdog, [healthchecks.io](https://healthchecks.io), which alarms when the reports turn to failures or stop.
+
+After every poll it sends a success ping if data arrived, alerts could be worked out and delivered, and Telegram is answering.
+After three unhealthy polls in a row, 30 minutes, it sends a failure ping listing what is wrong; a single bad poll is usually a blip the next one fixes.
+If the process dies or the machine loses power or its connection, the pings stop and the watchdog alarms by itself.
+
+Create a check with a 10 minute period and a 20 minute grace time, then store its ping URL beside the token, which anyone holding it could use to forge pings:
+
+```sh
+read -rsp 'Ping URL: ' u && printf 'FLOODWATCH_HEALTHCHECK_URL=%s\n' "$u" >> .env && unset u
+```
 
 Configuration is read from the environment:
 
@@ -99,6 +116,7 @@ Configuration is read from the environment:
 | `FLOODWATCH_PROVINCES` | `10,11,12,13,73,74` | ThaiWater province codes to collect |
 | `FLOODWATCH_BMA_RAIN_ENABLED` | `false` | poll the BMA rain gauges |
 | `FLOODWATCH_TELEGRAM_TOKEN` | none | bot token from @BotFather; keep it in `.env` |
+| `FLOODWATCH_HEALTHCHECK_URL` | none | watchdog ping URL; keep it in `.env` |
 | `FLOODWATCH_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 
 ## Using the bot
@@ -141,5 +159,6 @@ Store tests start their own Postgres with testcontainers, so they need Docker bu
 | `internal/alert` | pure rules and the evaluator |
 | `internal/bot` | Telegram sign-up, commands, message rendering and alert delivery |
 | `internal/telegram` | minimal Bot API client that keeps the token out of errors and logs |
+| `internal/health` | reports each poll to the outside watchdog |
 | `internal/store` | Postgres access through sqlc, with embedded goose migrations |
 | `internal/config` | environment configuration |
