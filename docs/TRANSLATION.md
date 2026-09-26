@@ -40,7 +40,7 @@ These terms appear throughout, so agree on them first.
 | Measured 17:40 · 20 min ago | วัดเมื่อ 17:40 น. · 20 นาทีที่แล้ว | details |
 | Flooded roads right now | ถนนที่มีน้ำท่วมตอนนี้ | map link |
 | Data: ThaiWater (HII) | แหล่งข้อมูล: ThaiWater (สสน.) | sources |
-| Unofficial data | ข้อมูลนี้ไม่ใช่ประกาศเตือนภัยอย่างเป็นทางการ | disclaimer |
+| This is not an official warning | ข้อมูลนี้ไม่ใช่ประกาศเตือนภัยอย่างเป็นทางการ | disclaimer |
 | BMA hotline 1555, emergency 1669 | สายด่วน กทม. 1555 · เหตุฉุกเฉิน 1669 | disclaimer |
 
 The actions for each risk level are in `Actions` in `th.go`, one short line each.

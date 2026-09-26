@@ -179,7 +179,8 @@ var english = texts{
 	RainGauges:  "Rain gauges",
 	DataVia:     "Data: ThaiWater (HII)",
 	Checked:     func(at string) string { return "Checked " + at },
-	Disclaimer: "<i>Unofficial data. Measurements may be delayed, incomplete or inaccurate.\n" +
+	// The readings come from official gauges; what is unofficial is the verdict.
+	Disclaimer: "<i>This is not an official warning. Measurements may be delayed, incomplete or inaccurate.\n" +
 		"Official information: BMA 1555 · Emergency: 1669</i>",
 	RainPinWindows: [3]string{"1 h", "3 h", "24 h"},
 	RainPinAmount:  func(amount, window string) string { return amount + " in " + window },
