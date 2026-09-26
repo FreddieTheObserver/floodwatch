@@ -88,6 +88,7 @@ Configuration is read from the environment:
 Send the bot a location, or paste coordinates such as `13.6515, 100.4945` from a map app on a computer.
 Your first place is called Home; later locations ask whether to move a place there or add a new one, up to five.
 Each new place gets a status message straight away, and after that the bot only writes when something changes.
+Status messages, and alerts about worsening conditions, link to the BMA's [flooded roads map](https://now.bangkok.go.th/flood-alert.html), since a canal gauge kilometres away cannot say whether your street is under water.
 
 | Command | What it does |
 | --- | --- |

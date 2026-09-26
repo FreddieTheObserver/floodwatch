@@ -22,6 +22,11 @@ const (
 	// Promised to the BMA Drainage and Sewerage Department in the request for
 	// access: every message using their rain data credits them in these words.
 	bmaCredit = "ข้อมูลฝน: สำนักการระบายน้ำ กรุงเทพมหานคร"
+
+	// Gauges cannot say whether a street is under water; BMA's road sensor map
+	// can. Linking to the public page needs no permission, unlike reading its
+	// data. The page cannot be opened on a location, hence the zoom hint.
+	floodRoadsLine = `🚗 <a href="https://now.bangkok.go.th/flood-alert.html">Flooded roads right now</a> on the BMA map (zoom to your area)`
 )
 
 var (
@@ -135,6 +140,10 @@ func digestText(d alert.Digest, checked time.Time) string {
 	for i, c := range changes {
 		b.WriteString("\n" + changeText(c) + "\n")
 		findings[i] = c.Finding
+	}
+	// Only worsening news sends people to check the roads; an all clear does not.
+	if slices.ContainsFunc(changes, func(c alert.Change) bool { return c.Severity > c.From }) {
+		b.WriteString("\n" + floodRoadsLine + "\n")
 	}
 	b.WriteString("\n" + footer(findings, checked))
 	return b.String()
@@ -276,6 +285,7 @@ func statusText(sub alert.Subscription, findings []alert.Finding, checked time.T
 		fmt.Fprintf(&b, "No rain gauge within %d km.\n", alert.FallbackRadiusM/1000)
 	}
 
+	b.WriteString("\n" + floodRoadsLine + "\n")
 	b.WriteString("\n" + footer(findings, checked))
 	return b.String()
 }

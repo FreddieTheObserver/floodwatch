@@ -37,6 +37,20 @@ func TestDigestPutsWorstNewsFirst(t *testing.T) {
 	if strings.Contains(text, bmaCredit) {
 		t.Errorf("BMA credited without any BMA data:\n%s", text)
 	}
+	if link, footer := strings.Index(text, floodRoadsLine), strings.Index(text, "Readings from"); link < 0 || link > footer {
+		t.Errorf("worsening news lacks the flooded roads link above the footer:\n%s", text)
+	}
+}
+
+func TestAllClearDigestHasNoRoadsLink(t *testing.T) {
+	d := alert.Digest{
+		Subscription: alert.Subscription{Label: "Home"},
+		Changes: []alert.Change{{From: alert.SeverityWatch, Finding: alert.Finding{Key: alert.Key{Rule: alert.RuleRain}, Known: true,
+			Station: alert.Station{Name: "Krung Thep 3"}, DistanceM: 3100, Rain1h: ptr(2)}}},
+	}
+	if text := digestText(d, checked); strings.Contains(text, "flood-alert.html") {
+		t.Errorf("an all clear sends people to the flood map:\n%s", text)
+	}
 }
 
 func TestDigestCreditsBMAWhenItsDataIsUsed(t *testing.T) {
@@ -80,6 +94,7 @@ func TestStatusText(t *testing.T) {
 		"🟢 Chao Phraya 15 (5.4 km): 1.82 m below the bank at 13:30",
 		"🟡 Heavy rain over the last 24 hours: 0.5 mm in 1 h, 124 mm in 24 h at Krung Thep 3 (4.9 km), 13:30",
 		"Wettest of 7 gauges reporting nearby.",
+		floodRoadsLine,
 		"checked 14:20",
 	} {
 		if !strings.Contains(text, want) {
