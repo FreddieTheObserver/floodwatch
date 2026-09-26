@@ -21,7 +21,13 @@ const me int64 = 42
 type fakeAPI struct {
 	sent    []telegram.OutgoingMessage
 	edits   []string
+	venues  []string
 	sendErr map[int64]error
+}
+
+func (f *fakeAPI) SendVenue(_ context.Context, _ int64, _, _ float64, title, address string) error {
+	f.venues = append(f.venues, title+" | "+address)
+	return nil
 }
 
 func (f *fakeAPI) GetUpdates(context.Context, int64, int) ([]telegram.Update, error) { return nil, nil }
@@ -126,19 +132,19 @@ func (s *fakeStore) ForgetRecipient(_ context.Context, _, rcpt string) (int64, e
 }
 
 type fakeEval struct {
-	findings  []alert.Finding
-	pending   []alert.Digest
-	acked     []int64
-	baselined []alert.Subscription
+	assessment alert.Assessment
+	pending    []alert.Digest
+	acked      []int64
+	baselined  []alert.Subscription
 }
 
-func (e *fakeEval) Pending(context.Context) ([]alert.Digest, error) { return e.pending, nil }
+func (e *fakeEval) Evaluate(context.Context) ([]alert.Digest, error) { return e.pending, nil }
 func (e *fakeEval) Ack(_ context.Context, d alert.Digest) error {
 	e.acked = append(e.acked, d.Subscription.ID)
 	return nil
 }
-func (e *fakeEval) Status(context.Context, alert.Subscription) ([]alert.Finding, error) {
-	return e.findings, nil
+func (e *fakeEval) Status(context.Context, alert.Subscription) (alert.Assessment, error) {
+	return e.assessment, nil
 }
 func (e *fakeEval) Baseline(_ context.Context, sub alert.Subscription) error {
 	e.baselined = append(e.baselined, sub)
@@ -149,17 +155,25 @@ var checked = time.Date(2026, 9, 26, 14, 20, 0, 0, ict)
 
 func sampleFindings() []alert.Finding {
 	bank := 2.16
-	water := alert.Station{ID: 7, Source: "thaiwater", Name: "Chao Phraya 15", BankMSL: &bank}
-	gauge := alert.Station{ID: 9, Source: "thaiwater", Name: "Krung Thep 3"}
+	water := alert.Station{ID: 7, Source: "thaiwater", Agency: "HII", Name: "Chao Phraya 15", BankMSL: &bank}
+	gauge := alert.Station{ID: 9, Source: "thaiwater", Agency: "HII", Name: "Krung Thep 3"}
 	at := time.Date(2026, 9, 26, 13, 30, 0, 0, ict)
 	return []alert.Finding{
 		{Key: alert.Key{StationID: 7, Rule: alert.RuleWaterLevel}, Known: true, Station: water, DistanceM: 5400, At: at, LevelMSL: 0.34, BankMSL: bank},
 		{Key: alert.Key{StationID: 7, Rule: alert.RuleWaterRising}, Station: water, DistanceM: 5400, At: at, LevelMSL: 0.34, BankMSL: bank},
 		{Key: alert.Key{StationID: 7, Rule: alert.RuleWaterStale}, Known: true, Station: water, DistanceM: 5400, At: at},
 		{Key: alert.Key{Rule: alert.RuleRain}, Known: true, Severity: alert.SeverityWatch, Station: gauge, DistanceM: 4900, At: at,
-			Rain1h: ptr(0.5), Rain24h: ptr(124), RainWindow: 24 * time.Hour, FreshGauges: 7},
+			Rain1h: ptr(0.5), Rain24h: ptr(124), RainWindow: 24 * time.Hour, FreshGauges: 7, Agencies: []string{"HII"}},
 		{Key: alert.Key{Rule: alert.RuleRainStale}, Known: true, FreshGauges: 7},
 	}
+}
+
+// sampleAssessment is the real rules' verdict on sampleFindings: the canal is
+// far below its bank, and a day of heavy rain at a gauge inside the radius
+// makes it a watch that is easing, since the last hour was nearly dry.
+func sampleAssessment() alert.Assessment {
+	findings := sampleFindings()
+	return alert.Assessment{Findings: findings, Risk: alert.Overall(findings, defaultRadiusM)}
 }
 
 func ptr(v float64) *float64 { return &v }
@@ -172,7 +186,7 @@ type harness struct {
 }
 
 func newHarness() *harness {
-	h := &harness{api: &fakeAPI{sendErr: map[int64]error{}}, store: &fakeStore{}, eval: &fakeEval{findings: sampleFindings()}}
+	h := &harness{api: &fakeAPI{sendErr: map[int64]error{}}, store: &fakeStore{}, eval: &fakeEval{assessment: sampleAssessment()}}
 	h.bot = New(h.api, h.store, h.eval, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	h.bot.now = func() time.Time { return checked }
 	return h
@@ -385,7 +399,7 @@ func TestCommandsStillWorkFromTheNamingReplyBox(t *testing.T) {
 	h.location(13.6515, 100.4945)
 	h.tap("rn:1")
 	h.replyTo(h.api.last(t), "/status")
-	if h.store.subs[0].Label != "Home" || !strings.Contains(h.api.last(t).Text, "📍 <b>Home</b>") {
+	if h.store.subs[0].Label != "Home" || !strings.Contains(h.api.last(t).Text, "around <b>Home</b>") {
 		t.Errorf("label %q, reply %q", h.store.subs[0].Label, h.api.last(t).Text)
 	}
 }
@@ -454,7 +468,10 @@ func TestGroupChatsAreIgnored(t *testing.T) {
 
 func TestUncoveredLocationIsRefused(t *testing.T) {
 	h := newHarness()
-	h.eval.findings = []alert.Finding{{Key: alert.Key{Rule: alert.RuleRain}}, {Key: alert.Key{Rule: alert.RuleRainStale}}}
+	h.eval.assessment = alert.Assessment{
+		Findings: []alert.Finding{{Key: alert.Key{Rule: alert.RuleRain}}, {Key: alert.Key{Rule: alert.RuleRainStale}}},
+		Risk:     alert.Risk{Level: alert.RiskUnknown},
+	}
 	h.location(18.79, 98.98)
 	if len(h.store.subs) != 0 || h.api.last(t).Text != notCoveredText {
 		t.Errorf("subs = %+v, reply = %q", h.store.subs, h.api.last(t).Text)
@@ -463,12 +480,10 @@ func TestUncoveredLocationIsRefused(t *testing.T) {
 
 func TestNotifyAcknowledgesOnlyWhatWasDelivered(t *testing.T) {
 	h := newHarness()
-	change := alert.Change{Finding: sampleFindings()[3], From: alert.SeverityNone}
-	h.eval.pending = []alert.Digest{
-		{Subscription: alert.Subscription{ID: 1, Recipient: "42", Label: "Home"}, Changes: []alert.Change{change}},
-		{Subscription: alert.Subscription{ID: 2, Recipient: "43", Label: "Home"}, Changes: []alert.Change{change}},
-		{Subscription: alert.Subscription{ID: 3, Recipient: "44", Label: "Home"}, Changes: []alert.Change{change}},
+	digest := func(id int64, rcpt string) alert.Digest {
+		return alert.Digest{Subscription: alert.Subscription{ID: id, Recipient: rcpt, Label: "Home"}, Assessment: sampleAssessment()}
 	}
+	h.eval.pending = []alert.Digest{digest(1, "42"), digest(2, "43"), digest(3, "44")}
 	h.api.sendErr[43] = errors.New("timeout")
 	h.api.sendErr[44] = &telegram.APIError{Code: 403, Description: "Forbidden: bot was blocked by the user"}
 
@@ -479,6 +494,23 @@ func TestNotifyAcknowledgesOnlyWhatWasDelivered(t *testing.T) {
 	}
 	if len(h.store.forgotten) != 1 || h.store.forgotten[0] != "44" {
 		t.Errorf("forgotten = %v, want the recipient who blocked the bot", h.store.forgotten)
+	}
+}
+
+func TestStatusOffersTheMap(t *testing.T) {
+	h := newHarness()
+	h.location(13.6515, 100.4945)
+	if got := buttons(t, h.api.last(t)); strings.Join(got, " ") != "map:1" {
+		t.Fatalf("status buttons = %v", got)
+	}
+	h.tap("map:1")
+	want := []string{
+		"📍 Home | Your place",
+		"🌊 Chao Phraya 15 | 5.4 km from Home · 1.82 m below the bank at 13:30",
+		"🌧️ Krung Thep 3 | 4.9 km from Home · wettest nearby, 0.5 mm in 1 h, 124 mm in 24 h at 13:30",
+	}
+	if strings.Join(h.api.venues, "\n") != strings.Join(want, "\n") {
+		t.Errorf("pins:\n%s\nwant:\n%s", strings.Join(h.api.venues, "\n"), strings.Join(want, "\n"))
 	}
 }
 

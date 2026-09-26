@@ -30,17 +30,29 @@ func NewEvaluator(store Store, sources []string) *Evaluator {
 	return &Evaluator{store: store, sources: sources, now: time.Now}
 }
 
-// Digest is everything one place's subscriber should be told after an
-// evaluation, sent as a single message.
-type Digest struct {
-	Subscription Subscription
-	Changes      []Change
+// Assessment is one place's findings and the overall risk judged from them.
+type Assessment struct {
+	Findings []Finding
+	Risk     Risk
 }
 
-// Pending returns a digest for every place whose situation changed since its
-// subscriber was last told. Nothing is recorded until Ack, so a digest that
-// fails to send is simply produced again next time.
-func (e *Evaluator) Pending(ctx context.Context) ([]Digest, error) {
+// Digest tells one subscriber that a place's overall risk changed.
+type Digest struct {
+	Subscription Subscription
+	Assessment
+	// From is the level the subscriber was last told, which is low for a place
+	// never told anything.
+	From int
+}
+
+func riskKey(sub Subscription) Key { return Key{SubscriptionID: sub.ID, Rule: RuleRisk} }
+
+// Evaluate judges every place and returns a digest for each whose overall risk
+// changed since its subscriber was last told. The per-gauge severities behind
+// each risk are recorded as they stand, since hysteresis works from them; the
+// risk itself is recorded only on Ack, so a digest that fails to send is
+// produced again next time.
+func (e *Evaluator) Evaluate(ctx context.Context) ([]Digest, error) {
 	snap, err := e.snapshot(ctx)
 	if err != nil {
 		return nil, err
@@ -55,52 +67,67 @@ func (e *Evaluator) Pending(ctx context.Context) ([]Digest, error) {
 	}
 
 	var out []Digest
+	factors := make(map[Key]int)
 	for _, sub := range subs {
-		if changes := Changes(Assess(snap, sub, current), current); len(changes) > 0 {
-			out = append(out, Digest{Subscription: sub, Changes: changes})
+		a := assess(snap, sub, current)
+		for k, v := range factorStates(a.Findings) {
+			factors[k] = v
 		}
+		if from := current[riskKey(sub)]; a.Risk.Level != from {
+			out = append(out, Digest{Subscription: sub, Assessment: a, From: from})
+		}
+	}
+	if err := e.store.RecordAlertStates(ctx, factors, false); err != nil {
+		return nil, fmt.Errorf("record gauge states: %w", err)
 	}
 	return out, nil
 }
 
 // Ack records that a digest was delivered.
 func (e *Evaluator) Ack(ctx context.Context, d Digest) error {
-	states := make(map[Key]int, len(d.Changes))
-	for _, c := range d.Changes {
-		states[c.Key] = c.Severity
-	}
-	return e.store.RecordAlertStates(ctx, states, true)
+	return e.store.RecordAlertStates(ctx, map[Key]int{riskKey(d.Subscription): d.Risk.Level}, true)
 }
 
 // Status assesses a place without changing anything. The place need not be
 // subscribed; one with ID 0 is judged without any history.
-func (e *Evaluator) Status(ctx context.Context, sub Subscription) ([]Finding, error) {
+func (e *Evaluator) Status(ctx context.Context, sub Subscription) (Assessment, error) {
 	snap, err := e.snapshot(ctx)
 	if err != nil {
-		return nil, err
+		return Assessment{}, err
 	}
 	current, err := e.store.AlertStates(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("alert states: %w", err)
+		return Assessment{}, fmt.Errorf("alert states: %w", err)
 	}
-	return Assess(snap, sub, current), nil
+	return assess(snap, sub, current), nil
 }
 
 // Baseline records a new place's current situation as already told, for when
 // its subscriber has just been shown a status. Otherwise the first evaluation
-// would repeat all of it as alerts.
+// would repeat it as an alert.
 func (e *Evaluator) Baseline(ctx context.Context, sub Subscription) error {
-	findings, err := e.Status(ctx, sub)
+	a, err := e.Status(ctx, sub)
 	if err != nil {
 		return err
 	}
+	states := factorStates(a.Findings)
+	states[riskKey(sub)] = a.Risk.Level
+	return e.store.RecordAlertStates(ctx, states, false)
+}
+
+func assess(snap Snapshot, sub Subscription, current map[Key]int) Assessment {
+	findings := Assess(snap, sub, current)
+	return Assessment{Findings: findings, Risk: Overall(findings, sub.RadiusM)}
+}
+
+func factorStates(findings []Finding) map[Key]int {
 	states := make(map[Key]int)
 	for _, f := range findings {
-		if f.Known && f.Severity > SeverityNone {
+		if f.Known {
 			states[f.Key] = f.Severity
 		}
 	}
-	return e.store.RecordAlertStates(ctx, states, false)
+	return states
 }
 
 func (e *Evaluator) snapshot(ctx context.Context) (Snapshot, error) {

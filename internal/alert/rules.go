@@ -18,11 +18,14 @@ const (
 	RuleWaterStale  Rule = "water_stale"
 	RuleRain        Rule = "rain"
 	RuleRainStale   Rule = "rain_stale"
+	// RuleRisk is the overall risk of a place, the one thing subscribers are
+	// alerted about; the rules above are what it is judged from.
+	RuleRisk Rule = "risk"
 )
 
 // IsArea reports whether the rule is judged across all gauges around a place
 // rather than per station.
-func (r Rule) IsArea() bool { return r == RuleRain || r == RuleRainStale }
+func (r Rule) IsArea() bool { return r == RuleRain || r == RuleRainStale || r == RuleRisk }
 
 const (
 	// Readings older than these no longer describe the present. ThaiWater
@@ -131,10 +134,11 @@ type Key struct {
 type Finding struct {
 	Key
 	Severity int
-	// Known is false when there is no fresh data to judge by. The severity last
-	// told to the subscriber then stands, so a silent gauge never reads as an
-	// all clear.
+	// Known is false when there is no fresh data to judge by. Held is then
+	// true if the last judged severity was raised: it stands until fresh data
+	// says otherwise, so a gauge going quiet never reads as an all clear.
 	Known bool
+	Held  bool
 
 	// The station judged; for rain, the gauge with the most rain.
 	Station   Station
@@ -152,15 +156,9 @@ type Finding struct {
 	Agencies    []string
 }
 
-// Change is a finding whose severity differs from what the subscriber was
-// last told.
-type Change struct {
-	Finding
-	From int
-}
-
 // Assess judges every rule for one place. current holds the severities last
-// told to subscribers and may be nil, as for a place not yet subscribed.
+// judged, which hysteresis and held severities work from; it may be nil, as
+// for a place not yet subscribed.
 func Assess(snap Snapshot, sub Subscription, current map[Key]int) []Finding {
 	water, rain := watched(snap, sub)
 	var out []Finding
@@ -170,15 +168,10 @@ func Assess(snap Snapshot, sub Subscription, current map[Key]int) []Finding {
 	return append(out, assessRain(snap, sub, rain, current)...)
 }
 
-// Changes keeps the known findings whose severity moved.
-func Changes(findings []Finding, current map[Key]int) []Change {
-	var out []Change
-	for _, f := range findings {
-		if from := current[f.Key]; f.Known && f.Severity != from {
-			out = append(out, Change{Finding: f, From: from})
-		}
-	}
-	return out
+// hold carries a finding's last judged severity while it has no fresh data.
+func hold(f *Finding, current map[Key]int) {
+	f.Severity = current[f.Key]
+	f.Held = f.Severity > SeverityNone
 }
 
 type nearby struct {
@@ -253,6 +246,8 @@ func assessWater(snap Snapshot, sub Subscription, n nearby, current map[Key]int)
 	stale.Known = true
 	if snap.Now.Sub(latest.At) > waterFresh {
 		stale.Severity = SeverityWatch
+		hold(&level, current)
+		hold(&rising, current)
 		return []Finding{level, rising, stale}
 	}
 
@@ -325,7 +320,10 @@ func assessRain(snap Snapshot, sub Subscription, gauges []nearby, current map[Ke
 		}
 		relaxed = max(relaxed, rainLevel(p, rainHysteresis))
 		raw := rainLevel(p, 1)
-		if raw > worstRaw || (raw == worstRaw && wetter(p, worstPoint)) {
+		// Among gauges at the same level, one inside the radius outranks one
+		// beyond it, which the overall risk would count a level lower.
+		inside, worstInside := g.DistanceM <= float64(sub.RadiusM), worst.DistanceM <= float64(sub.RadiusM)
+		if raw > worstRaw || (raw == worstRaw && (inside && !worstInside || inside == worstInside && wetter(p, worstPoint))) {
 			worst, worstPoint, worstRaw = g, p, raw
 		}
 	}
@@ -333,6 +331,7 @@ func assessRain(snap Snapshot, sub Subscription, gauges []nearby, current map[Ke
 	stale.Known = true
 	if rain.FreshGauges == 0 {
 		stale.Severity = SeverityWatch
+		hold(&rain, current)
 		return []Finding{rain, stale}
 	}
 

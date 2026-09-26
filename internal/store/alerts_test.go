@@ -119,6 +119,21 @@ func TestAlertStatesRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRiskIsStoredAsAnAreaRule(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+	sub, _ := s.SaveSubscription(ctx, place("42", "home"))
+	risk := alert.Key{SubscriptionID: sub.ID, Rule: alert.RuleRisk}
+	for _, level := range []int{alert.SeverityWarning, alert.RiskUnknown} {
+		if err := s.RecordAlertStates(ctx, map[alert.Key]int{risk: level}, true); err != nil {
+			t.Fatalf("record risk %d: %v", level, err)
+		}
+	}
+	if got, _ := s.AlertStates(ctx); got[risk] != alert.RiskUnknown || countRows(t, s, "alert_states") != 1 {
+		t.Errorf("states = %v, want one risk row at unknown", got)
+	}
+}
+
 func TestRecordingForADeletedSubscriptionIsANoOp(t *testing.T) {
 	s := newTestStore(t)
 	ctx := t.Context()

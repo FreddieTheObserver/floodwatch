@@ -32,6 +32,7 @@ const (
 type API interface {
 	GetUpdates(ctx context.Context, offset int64, timeoutSeconds int) ([]telegram.Update, error)
 	SendMessage(ctx context.Context, m telegram.OutgoingMessage) error
+	SendVenue(ctx context.Context, chatID int64, lat, lng float64, title, address string) error
 	EditMessageText(ctx context.Context, chatID, messageID int64, text, parseMode string) error
 	AnswerCallbackQuery(ctx context.Context, id string) error
 	SetMyCommands(ctx context.Context, commands []telegram.Command) error
@@ -46,9 +47,9 @@ type Store interface {
 }
 
 type Evaluator interface {
-	Pending(ctx context.Context) ([]alert.Digest, error)
+	Evaluate(ctx context.Context) ([]alert.Digest, error)
 	Ack(ctx context.Context, d alert.Digest) error
-	Status(ctx context.Context, sub alert.Subscription) ([]alert.Finding, error)
+	Status(ctx context.Context, sub alert.Subscription) (alert.Assessment, error)
 	Baseline(ctx context.Context, sub alert.Subscription) error
 }
 
@@ -217,12 +218,12 @@ func round5(v float64) float64 { return math.Round(v*1e5) / 1e5 }
 
 func (b *Bot) onLocation(ctx context.Context, chat int64, lat, lng float64) {
 	lat, lng = round5(lat), round5(lng)
-	findings, err := b.eval.Status(ctx, alert.Subscription{Channel: channel, Recipient: recipient(chat), Lat: lat, Lng: lng, RadiusM: defaultRadiusM})
+	candidate, err := b.eval.Status(ctx, alert.Subscription{Channel: channel, Recipient: recipient(chat), Lat: lat, Lng: lng, RadiusM: defaultRadiusM})
 	if err != nil {
 		b.fail(ctx, chat, "check a location", err)
 		return
 	}
-	if !covered(findings) {
+	if !covered(candidate.Findings) {
 		b.send(ctx, chat, notCoveredText, nil)
 		return
 	}
@@ -264,13 +265,13 @@ func (b *Bot) savePlace(ctx context.Context, chat int64, label string, lat, lng 
 		return sub, false
 	}
 
-	findings, err := b.eval.Status(ctx, sub)
+	a, err := b.eval.Status(ctx, sub)
 	if err != nil {
 		b.fail(ctx, chat, "read the gauges", err)
 		return sub, false
 	}
-	intro := fmt.Sprintf("Watching <b>%s</b>. I'll message you when anything here changes.\n\n", esc(sub.Label))
-	if !b.send(ctx, chat, intro+statusText(sub, findings, b.now()), nil) {
+	intro := fmt.Sprintf("Watching <b>%s</b>. I'll message you when its flood risk changes.\n\n", esc(sub.Label))
+	if !b.send(ctx, chat, intro+statusText(sub, a, b.now()), mapButton(sub)) {
 		return sub, false
 	}
 	// The subscriber has just seen all of this; without a baseline the next
@@ -292,12 +293,69 @@ func (b *Bot) statusAll(ctx context.Context, chat int64) {
 		return
 	}
 	for _, p := range places {
-		findings, err := b.eval.Status(ctx, p)
+		a, err := b.eval.Status(ctx, p)
 		if err != nil {
 			b.fail(ctx, chat, "read the gauges", err)
 			return
 		}
-		b.send(ctx, chat, statusText(p, findings, b.now()), nil)
+		b.send(ctx, chat, statusText(p, a, b.now()), mapButton(p))
+	}
+}
+
+func mapButton(sub alert.Subscription) telegram.InlineKeyboard {
+	return telegram.InlineKeyboard{InlineKeyboard: [][]telegram.InlineButton{{
+		{Text: "📍 Show gauges on map", CallbackData: fmt.Sprintf("map:%d", sub.ID)},
+	}}}
+}
+
+// Pins beyond these add clutter without changing the picture.
+const maxWaterPins = 3
+
+type pin struct {
+	lat, lng       float64
+	title, address string
+}
+
+// mapPins are a place and the gauges its risk is judged from. Telegram cannot
+// show a drawn map inside a message, but venues open in the phone's own maps
+// app with no server of ours involved.
+func mapPins(place alert.Subscription, a alert.Assessment) []pin {
+	pins := []pin{{place.Lat, place.Lng, "📍 " + place.Label, "Your place"}}
+	water := 0
+	for _, f := range a.Findings {
+		switch {
+		case f.Rule == alert.RuleWaterLevel && water < maxWaterPins:
+			water++
+			reading := "no data since " + clock(f.At)
+			if f.Known {
+				reading = bankText(f.LevelMSL, f.BankMSL) + " at " + clock(f.At)
+			}
+			pins = append(pins, pin{f.Station.Lat, f.Station.Lng, "🌊 " + f.Station.Name,
+				fmt.Sprintf("%s from %s · %s", distance(f.DistanceM), place.Label, reading)})
+		case f.Rule == alert.RuleRain && f.Known:
+			pins = append(pins, pin{f.Station.Lat, f.Station.Lng, "🌧️ " + f.Station.Name,
+				fmt.Sprintf("%s from %s · wettest nearby, %s at %s", distance(f.DistanceM), place.Label, rainAmounts(f), clock(f.At))})
+		}
+	}
+	return pins
+}
+
+func (b *Bot) showMap(ctx context.Context, chat int64, place alert.Subscription) {
+	a, err := b.eval.Status(ctx, place)
+	if err != nil {
+		b.fail(ctx, chat, "read the gauges", err)
+		return
+	}
+	for _, p := range mapPins(place, a) {
+		err := b.api.SendVenue(ctx, chat, p.lat, p.lng, p.title, p.address)
+		if telegram.Blocked(err) {
+			b.forgetBlocked(ctx, recipient(chat))
+			return
+		}
+		if err != nil {
+			b.log.Warn("send map pin failed", "chat", chat, "err", err)
+			return
+		}
 	}
 }
 
@@ -364,6 +422,14 @@ func (b *Bot) onCallback(ctx context.Context, cq *telegram.CallbackQuery) {
 		}
 		b.edit(ctx, chat, prompt, "Moving <b>"+esc(place.Label)+"</b>.")
 		b.savePlace(ctx, chat, place.Label, lat, lng)
+
+	case "map":
+		place, ok := b.ownPlace(ctx, chat, arg)
+		if !ok {
+			b.send(ctx, chat, "That place is gone. See /places.", nil)
+			return
+		}
+		b.showMap(ctx, chat, place)
 
 	case "rn":
 		place, ok := b.ownPlace(ctx, chat, arg)

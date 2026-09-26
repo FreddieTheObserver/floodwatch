@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"cmp"
 	"fmt"
 	"html"
 	"math"
@@ -29,15 +28,43 @@ const (
 	floodRoadsLine = `🚗 <a href="https://now.bangkok.go.th/flood-alert.html">Flooded roads right now</a> on the BMA map (zoom to your area)`
 )
 
+// Indexed by risk level, the last entry being alert.RiskUnknown.
+var (
+	riskIcons   = [...]string{"🟢", "🟡", "🟠", "🔴", staleIcon}
+	riskNames   = [...]string{"LOW", "WATCH", "WARNING", "HIGH", "UNKNOWN"}
+	riskActions = [...]string{
+		"Nothing to do right now.",
+		"Keep an eye on it, and check the flooded roads map before driving through low roads.",
+		"Move your car to higher ground and valuables off the floor. Avoid low roads.",
+		"Water is over the bank nearby. Stay off flooded roads, move vehicles and valuables up now, and follow official BMA instructions (1555).",
+		"I can't judge the risk without fresh readings. Check official BMA updates and the flooded roads map.",
+	}
+)
+
 var (
 	severityIcons = [...]string{"🟢", "🟡", "🟠", "🔴"}
-	waterTitles   = [...]string{"Normal", "High water", "Near the bank", "Overflowing"}
 	rainTitles    = [...]string{"Light or no rain", "Heavy rain", "Very heavy rain", "Rain beyond drainage capacity"}
 )
 
 func esc(s string) string { return html.EscapeString(s) }
 
 func clock(t time.Time) string { return t.In(ict).Format("15:04") }
+
+// ago says how old a reading is, since a time alone leaves the reader to work
+// out whether it is still current.
+func ago(t, now time.Time) string {
+	d := now.Sub(t).Round(time.Minute)
+	switch h, m := int(d.Hours()), int(d.Minutes())%60; {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%d min ago", m)
+	case m == 0 || h >= 3:
+		return fmt.Sprintf("%d h ago", h)
+	default:
+		return fmt.Sprintf("%d h %d min ago", h, m)
+	}
+}
 
 func distance(m float64) string {
 	if m < 1000 {
@@ -112,103 +139,17 @@ func where(f alert.Finding) string {
 	return fmt.Sprintf("%s (%s)", esc(f.Station.Name), distance(f.DistanceM))
 }
 
+// whereFrom also says when a station is beyond the place's radius, which is
+// why it counts a level lower than its own reading suggests.
+func whereFrom(f alert.Finding, sub alert.Subscription) string {
+	if f.DistanceM > float64(sub.RadiusM) {
+		return fmt.Sprintf("%s (%s, outside your %s radius)", esc(f.Station.Name), distance(f.DistanceM), distance(float64(sub.RadiusM)))
+	}
+	return where(f)
+}
+
 func joinNonEmpty(sep string, parts ...string) string {
 	return strings.Join(slices.DeleteFunc(parts, func(s string) bool { return s == "" }), sep)
-}
-
-func footer(findings []alert.Finding, checked time.Time) string {
-	lines := []string{"Readings from ThaiWater (HII), checked " + clock(checked) + "."}
-	if slices.ContainsFunc(findings, usesBMAData) {
-		lines = append(lines, bmaCredit)
-	}
-	return strings.Join(append(lines, disclaimer), "\n")
-}
-
-// usesBMAData reports whether a finding drew on BMA gauges, whether fetched
-// from the BMA directly or republished through ThaiWater.
-func usesBMAData(f alert.Finding) bool {
-	return f.Station.Source == "bma" || f.Station.Agency == "BMA" || slices.Contains(f.Agencies, "BMA")
-}
-
-// digestText renders one place's changes, worst news first and recoveries last.
-func digestText(d alert.Digest, checked time.Time) string {
-	changes := slices.Clone(d.Changes)
-	slices.SortStableFunc(changes, func(a, b alert.Change) int {
-		return cmp.Or(
-			cmp.Compare(b.Severity, a.Severity),
-			cmp.Compare(b.Severity-b.From, a.Severity-a.From),
-			cmp.Compare(a.DistanceM, b.DistanceM))
-	})
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "🌊 <b>FloodWatch · %s</b>\n", esc(d.Subscription.Label))
-	findings := make([]alert.Finding, len(changes))
-	for i, c := range changes {
-		b.WriteString("\n" + changeText(c) + "\n")
-		findings[i] = c.Finding
-	}
-	// Only worsening news sends people to check the roads; an all clear does not.
-	if slices.ContainsFunc(changes, func(c alert.Change) bool { return c.Severity > c.From }) {
-		b.WriteString("\n" + floodRoadsLine + "\n")
-	}
-	b.WriteString("\n" + footer(findings, checked))
-	return b.String()
-}
-
-func changeText(c alert.Change) string {
-	easing := c.Severity < c.From && c.Severity > alert.SeverityNone
-	switch c.Rule {
-	case alert.RuleWaterLevel:
-		detail := joinNonEmpty(", ", bankText(c.LevelMSL, c.BankMSL), riseText(c.RiseCmPerHour))
-		if c.Severity == alert.SeverityNone {
-			return fmt.Sprintf("%s <b>Back to normal</b>: %s\n%s at %s.", clearIcon, where(c.Finding), detail, clock(c.At))
-		}
-		title := waterTitles[c.Severity]
-		if easing {
-			title = "Easing, now " + strings.ToLower(title)
-		}
-		return fmt.Sprintf("%s <b>%s</b>: %s\n%s at %s.", severityIcons[c.Severity], title, where(c.Finding), capitalise(detail), clock(c.At))
-
-	case alert.RuleWaterRising:
-		if c.Severity == alert.SeverityNone {
-			return fmt.Sprintf("%s <b>No longer rising fast</b>: %s", clearIcon, where(c.Finding))
-		}
-		return fmt.Sprintf("%s <b>Rising fast</b>: %s\n%s.", severityIcons[alert.SeverityWarning], where(c.Finding), risingDetail(c.Finding))
-
-	case alert.RuleWaterStale:
-		if c.Severity == alert.SeverityNone {
-			return fmt.Sprintf("%s <b>Reporting again</b>: %s", clearIcon, where(c.Finding))
-		}
-		return fmt.Sprintf("%s <b>No data</b>: %s has not reported since %s.", staleIcon, where(c.Finding), clock(c.At))
-
-	case alert.RuleRain:
-		if c.Severity == alert.SeverityNone {
-			return fmt.Sprintf("%s <b>Rain has eased</b>. Wettest gauge now: %s at %s.", clearIcon, rainAmounts(c.Finding), where(c.Finding))
-		}
-		title := rainTitle(c.Finding)
-		if easing {
-			title = "Rain easing, now " + strings.ToLower(title)
-		}
-		return fmt.Sprintf("%s <b>%s</b>: %s at %s, %s.", severityIcons[c.Severity], title, rainAmounts(c.Finding), where(c.Finding), clock(c.At))
-
-	case alert.RuleRainStale:
-		if c.Severity == alert.SeverityNone {
-			return fmt.Sprintf("%s <b>Rain readings are back</b> nearby.", clearIcon)
-		}
-		return fmt.Sprintf("%s <b>No fresh rain readings</b> from any gauge nearby.", staleIcon)
-	}
-	return ""
-}
-
-func risingDetail(f alert.Finding) string {
-	rate := riseText(f.RiseCmPerHour)
-	freeboard := f.BankMSL - f.LevelMSL
-	if freeboard <= 0 || f.RiseCmPerHour == nil || *f.RiseCmPerHour <= 0 {
-		return capitalise(joinNonEmpty(" while ", rate, bankText(f.LevelMSL, f.BankMSL)))
-	}
-	hours := freeboard * 100 / *f.RiseCmPerHour
-	return capitalise(fmt.Sprintf("%s, %s; at this rate it reaches the bank in about %s",
-		rate, bankText(f.LevelMSL, f.BankMSL), roughDuration(hours)))
 }
 
 func roughDuration(hours float64) string {
@@ -222,11 +163,10 @@ func roughDuration(hours float64) string {
 	}
 }
 
-func capitalise(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
+// usesBMAData reports whether a finding drew on BMA gauges, whether fetched
+// from the BMA directly or republished through ThaiWater.
+func usesBMAData(f alert.Finding) bool {
+	return f.Station.Source == "bma" || f.Station.Agency == "BMA" || slices.Contains(f.Agencies, "BMA")
 }
 
 // covered reports whether a place has any station within reach.
@@ -236,16 +176,76 @@ func covered(findings []alert.Finding) bool {
 	})
 }
 
-// statusText renders the current readings around one place.
-func statusText(sub alert.Subscription, findings []alert.Finding, checked time.Time) string {
+func trendText(t alert.Trend) string {
+	switch t {
+	case alert.TrendWorse:
+		return "↗ getting worse"
+	case alert.TrendBetter:
+		return "↘ improving"
+	case alert.TrendStable:
+		return "→ steady"
+	}
+	return ""
+}
+
+func headline(sub alert.Subscription, r alert.Risk) string {
+	return joinNonEmpty(" · ",
+		fmt.Sprintf("%s <b>%s</b> around <b>%s</b>", riskIcons[r.Level], riskNames[r.Level], esc(sub.Label)),
+		trendText(r.Trend))
+}
+
+// reasonText explains a risk level in words, from what set it.
+func reasonText(sub alert.Subscription, a alert.Assessment) string {
+	switch {
+	case a.Risk.Level == alert.RiskUnknown:
+		return fmt.Sprintf("No gauge near %s has reported recently.", esc(sub.Label))
+	case len(a.Risk.Drivers) == 0:
+		return fmt.Sprintf("Nothing near %s is at a warning level.", esc(sub.Label))
+	}
+	parts := make([]string, len(a.Risk.Drivers))
+	for i, d := range a.Risk.Drivers {
+		parts[i] = driverText(d, sub)
+	}
+	return strings.Join(parts, " ")
+}
+
+func driverText(f alert.Finding, sub alert.Subscription) string {
+	switch f.Rule {
+	case alert.RuleRain:
+		if f.Held {
+			return rainTitles[f.Severity] + " was the last reading before the rain gauges nearby went quiet."
+		}
+		return fmt.Sprintf("%s at %s: %s.", rainTitle(f), whereFrom(f, sub), rainAmounts(f))
+
+	case alert.RuleWaterRising, alert.RuleWaterLevel:
+		bank := bankText(f.LevelMSL, f.BankMSL)
+		if f.Held {
+			return fmt.Sprintf("%s was %s when it last reported at %s, and has been silent since.", whereFrom(f, sub), bank, clock(f.At))
+		}
+		if f.Rule == alert.RuleWaterLevel {
+			return fmt.Sprintf("%s is %s.", whereFrom(f, sub), joinNonEmpty(", ", bank, riseText(f.RiseCmPerHour)))
+		}
+		freeboard := f.BankMSL - f.LevelMSL
+		if freeboard <= 0 || f.RiseCmPerHour == nil || *f.RiseCmPerHour <= 0 {
+			return fmt.Sprintf("%s is %s and still %s.", whereFrom(f, sub), bank, riseText(f.RiseCmPerHour))
+		}
+		return fmt.Sprintf("%s is %s and %s; at this rate it reaches the bank in about %s.",
+			whereFrom(f, sub), bank, riseText(f.RiseCmPerHour), roughDuration(freeboard*100 / *f.RiseCmPerHour))
+	}
+	return ""
+}
+
+// detailsText lists every reading behind a risk, for anyone who wants the
+// numbers rather than the verdict.
+func detailsText(a alert.Assessment, now time.Time) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "📍 <b>%s</b>\n\n<b>Water</b>\n", esc(sub.Label))
+	b.WriteString("<b>Details</b>\n🌊 <b>Water</b>\n")
 
 	type station struct{ level, stale alert.Finding }
 	var order []int64
 	stations := map[int64]*station{}
 	var rain, rainStale alert.Finding
-	for _, f := range findings {
+	for _, f := range a.Findings {
 		switch f.Rule {
 		case alert.RuleRain:
 			rain = f
@@ -272,18 +272,18 @@ func statusText(sub alert.Subscription, findings []alert.Finding, checked time.T
 	for _, id := range order {
 		s := stations[id]
 		if s.stale.Severity > alert.SeverityNone || !s.level.Known {
-			fmt.Fprintf(&b, "%s %s: no data since %s\n", staleIcon, where(s.stale), clock(s.stale.At))
+			fmt.Fprintf(&b, "%s %s: no data since %s, %s\n", staleIcon, where(s.stale), clock(s.stale.At), ago(s.stale.At, now))
 			continue
 		}
 		detail := joinNonEmpty(", ", bankText(s.level.LevelMSL, s.level.BankMSL), riseText(s.level.RiseCmPerHour))
-		fmt.Fprintf(&b, "%s %s: %s at %s\n", severityIcons[s.level.Severity], where(s.level), detail, clock(s.level.At))
+		fmt.Fprintf(&b, "%s %s: %s at %s, %s\n", severityIcons[s.level.Severity], where(s.level), detail, clock(s.level.At), ago(s.level.At, now))
 	}
 
-	b.WriteString("\n<b>Rain</b>\n")
+	b.WriteString("🌧️ <b>Rain</b>\n")
 	switch {
 	case rain.Known:
-		fmt.Fprintf(&b, "%s %s: %s at %s, %s\n", severityIcons[rain.Severity], rainTitle(rain),
-			rainAmounts(rain), where(rain), clock(rain.At))
+		fmt.Fprintf(&b, "%s %s: %s at %s, %s, %s\n", severityIcons[rain.Severity], rainTitle(rain),
+			rainAmounts(rain), where(rain), clock(rain.At), ago(rain.At, now))
 		fmt.Fprintf(&b, "Wettest of %d gauges reporting nearby.\n", rain.FreshGauges)
 	case rainStale.Known:
 		fmt.Fprintf(&b, "%s No fresh rain readings from any gauge nearby.\n", staleIcon)
@@ -291,7 +291,80 @@ func statusText(sub alert.Subscription, findings []alert.Finding, checked time.T
 		fmt.Fprintf(&b, "No rain gauge within %d km.\n", alert.FallbackRadiusM/1000)
 	}
 
-	b.WriteString("\n" + floodRoadsLine + "\n")
-	b.WriteString("\n" + footer(findings, checked))
+	b.WriteString(sourcesText(a.Findings))
+	return b.String()
+}
+
+// sourcesText names who runs the gauges behind each kind of reading, all of
+// which currently arrive through ThaiWater.
+func sourcesText(findings []alert.Finding) string {
+	var water, rain []string
+	add := func(list *[]string, agency string) {
+		if agency != "" && !slices.Contains(*list, agency) {
+			*list = append(*list, agency)
+		}
+	}
+	for _, f := range findings {
+		switch f.Rule {
+		case alert.RuleWaterLevel:
+			add(&water, f.Station.Agency)
+		case alert.RuleRain:
+			for _, a := range f.Agencies {
+				add(&rain, a)
+			}
+		}
+	}
+	var parts []string
+	if len(water) > 0 {
+		parts = append(parts, "water gauges by "+strings.Join(water, ", "))
+	}
+	if len(rain) > 0 {
+		parts = append(parts, "rain gauges by "+strings.Join(rain, ", "))
+	}
+	return "Sources: " + strings.Join(append(parts, "all via ThaiWater (HII)."), "; ")
+}
+
+func footer(findings []alert.Finding, checked time.Time) string {
+	lines := []string{"Checked " + clock(checked) + "."}
+	if slices.ContainsFunc(findings, usesBMAData) {
+		lines = append(lines, bmaCredit)
+	}
+	return strings.Join(append(lines, disclaimer), "\n")
+}
+
+// statusText leads with the verdict, its reason and what to do, and keeps the
+// readings behind it in a collapsed section.
+func statusText(sub alert.Subscription, a alert.Assessment, checked time.Time) string {
+	var b strings.Builder
+	b.WriteString(headline(sub, a.Risk) + "\n\n")
+	b.WriteString(reasonText(sub, a) + "\n")
+	b.WriteString("<b>" + riskActions[a.Risk.Level] + "</b>\n\n")
+	b.WriteString(floodRoadsLine + "\n\n")
+	b.WriteString("<blockquote expandable>" + detailsText(a, checked) + "</blockquote>\n")
+	b.WriteString(footer(a.Findings, checked))
+	return b.String()
+}
+
+// digestText tells a subscriber that a place's overall risk changed.
+func digestText(d alert.Digest, checked time.Time) string {
+	sub, r := d.Subscription, d.Risk
+	var b strings.Builder
+	switch r.Level {
+	case alert.SeverityNone:
+		fmt.Fprintf(&b, "%s <b>%s: back to LOW</b>\n", clearIcon, esc(sub.Label))
+	case alert.RiskUnknown:
+		fmt.Fprintf(&b, "%s <b>%s: no fresh readings</b>\n", staleIcon, esc(sub.Label))
+	default:
+		fmt.Fprintf(&b, "%s\n", joinNonEmpty(" · ",
+			fmt.Sprintf("%s <b>%s: %s → %s</b>", riskIcons[r.Level], esc(sub.Label), riskNames[d.From], riskNames[r.Level]),
+			trendText(r.Trend)))
+	}
+	b.WriteString(reasonText(sub, d.Assessment) + "\n")
+	if r.Level != alert.SeverityNone {
+		b.WriteString("<b>" + riskActions[r.Level] + "</b>\n")
+		b.WriteString("\n" + floodRoadsLine + "\n")
+	}
+	b.WriteString("Send /status for the full picture.\n\n")
+	b.WriteString(footer(d.Findings, checked))
 	return b.String()
 }

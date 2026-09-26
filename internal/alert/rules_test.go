@@ -208,9 +208,12 @@ func TestStaleWaterNeverReadsAsAllClear(t *testing.T) {
 	f := newFixture().water(north(1, source.KindWater, 1, mm(2)), at(4*time.Hour, 1.0))
 	current := map[Key]int{{SubscriptionID: 1, StationID: 1, Rule: RuleWaterLevel}: SeveritySevere}
 
-	changes := Changes(Assess(f.snap, home, current), current)
-	if len(changes) != 1 || changes[0].Rule != RuleWaterStale || changes[0].Severity != SeverityWatch {
-		t.Fatalf("changes = %+v, want only the gauge going quiet", changes)
+	fs := Assess(f.snap, home, current)
+	if level := find(t, fs, 1, RuleWaterLevel); level.Known || !level.Held || level.Severity != SeveritySevere {
+		t.Errorf("level = %+v, want the last severity held", level)
+	}
+	if stale := find(t, fs, 1, RuleWaterStale); stale.Severity != SeverityWatch {
+		t.Errorf("stale = %d, want the gauge flagged as quiet", stale.Severity)
 	}
 }
 
@@ -297,7 +300,7 @@ func TestNoCoverageIsSilent(t *testing.T) {
 	f := newFixture().
 		water(north(1, source.KindWater, 40, mm(2)), at(0, 3)).
 		rain(north(11, source.KindRain, 40, nil), RainPoint{At: now, Rain1h: mm(99)})
-	if changes := Changes(Assess(f.snap, home, nil), nil); len(changes) != 0 {
-		t.Errorf("a place with no stations in reach produced %+v", changes)
+	if risk := Overall(Assess(f.snap, home, nil), home.RadiusM); risk.Level != RiskUnknown {
+		t.Errorf("a place with no stations in reach has risk %+v, want unknown", risk)
 	}
 }

@@ -11,7 +11,7 @@ import (
 // poll. A digest is acknowledged only once Telegram accepts it, so one that
 // fails is simply produced again after the next poll.
 func (b *Bot) Notify(ctx context.Context) {
-	digests, err := b.eval.Pending(ctx)
+	digests, err := b.eval.Evaluate(ctx)
 	if err != nil {
 		b.log.Error("evaluate alerts failed", "err", err)
 		return
