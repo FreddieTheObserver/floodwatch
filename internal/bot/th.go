@@ -61,7 +61,7 @@ var thai = texts{
 	},
 	Trends: [4]string{"", "↘ สถานการณ์ดีขึ้น", "→ สถานการณ์ทรงตัว", "↗ สถานการณ์แย่ลง"},
 	Headline: func(icon, risk, label string) string {
-		return fmt.Sprintf("%s <b>%s</b> บริเวณ%s<b>%s</b>", icon, risk, thaiSpace(label), label)
+		return fmt.Sprintf("%s <b>%s</b> บริเวณ%s<b>%s</b>", icon, risk, thaiSpaceBefore(label), label)
 	},
 	Transition: func(icon, label, from, to string) string {
 		return fmt.Sprintf("%s <b>%s: %s → %s</b>", icon, label, from, to)
@@ -75,10 +75,10 @@ var thai = texts{
 	WhatToDo:   "สิ่งที่ควรทำ",
 	FloodRoads: `🚗 <a href="` + floodRoadsURL + `">ถนนที่มีน้ำท่วมตอนนี้</a> บนแผนที่ของ กทม. (ซูมไปที่พื้นที่ของคุณ)`,
 	NothingRaised: func(label string) string {
-		return fmt.Sprintf("ระดับน้ำและปริมาณฝนที่สถานีวัดใกล้ %s ยังไม่ถึงเกณฑ์เฝ้าระวัง", label)
+		return fmt.Sprintf("ระดับน้ำและปริมาณฝนจากสถานีวัดใกล้%s%s%sยังไม่ถึงเกณฑ์เฝ้าระวัง", thaiSpaceBefore(label), label, thaiSpaceAfter(label))
 	},
 	NoRecentData: func(label string) string {
-		return fmt.Sprintf("ไม่มีสถานีวัดใกล้ %s ส่งข้อมูลในช่วงไม่กี่ชั่วโมงที่ผ่านมา", label)
+		return fmt.Sprintf("ไม่มีสถานีวัดใกล้%s%s%sส่งข้อมูลในช่วงไม่กี่ชั่วโมงที่ผ่านมา", thaiSpaceBefore(label), label, thaiSpaceAfter(label))
 	},
 
 	StationAway: func(name, distance string) string { return fmt.Sprintf("%s ห่าง %s", name, distance) },
@@ -336,11 +336,21 @@ func thaiForecastBank(level, bank float64) string {
 	}
 }
 
-// thaiSpace separates Thai text from a name that follows it: Thai runs
-// straight on into a Thai name, but takes a space before Latin letters or
-// digits.
-func thaiSpace(name string) string {
-	if r, _ := utf8.DecodeRuneInString(name); unicode.Is(unicode.Thai, r) {
+// thaiSpaceBefore and thaiSpaceAfter separate a name from the Thai text
+// around it: Thai runs straight on into a Thai name, but takes a space next to
+// Latin letters or digits.
+func thaiSpaceBefore(name string) string {
+	r, _ := utf8.DecodeRuneInString(name)
+	return thaiGap(r)
+}
+
+func thaiSpaceAfter(name string) string {
+	r, _ := utf8.DecodeLastRuneInString(name)
+	return thaiGap(r)
+}
+
+func thaiGap(r rune) string {
+	if unicode.Is(unicode.Thai, r) {
 		return ""
 	}
 	return " "

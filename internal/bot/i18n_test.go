@@ -226,3 +226,23 @@ func TestThaiRunsStraightOnIntoAThaiName(t *testing.T) {
 		}
 	}
 }
+
+func TestThaiPlaceNamesInSentences(t *testing.T) {
+	for label, want := range map[string][2]string{
+		"บ้าน": {
+			"ระดับน้ำและปริมาณฝนจากสถานีวัดใกล้บ้านยังไม่ถึงเกณฑ์เฝ้าระวัง",
+			"ไม่มีสถานีวัดใกล้บ้านส่งข้อมูลในช่วงไม่กี่ชั่วโมงที่ผ่านมา",
+		},
+		"Elio Del Ray": {
+			"ระดับน้ำและปริมาณฝนจากสถานีวัดใกล้ Elio Del Ray ยังไม่ถึงเกณฑ์เฝ้าระวัง",
+			"ไม่มีสถานีวัดใกล้ Elio Del Ray ส่งข้อมูลในช่วงไม่กี่ชั่วโมงที่ผ่านมา",
+		},
+	} {
+		if got := thai.NothingRaised(label); got != want[0] {
+			t.Errorf("nothing raised near %q = %q, want %q", label, got, want[0])
+		}
+		if got := thai.NoRecentData(label); got != want[1] {
+			t.Errorf("no recent data near %q = %q, want %q", label, got, want[1])
+		}
+	}
+}
