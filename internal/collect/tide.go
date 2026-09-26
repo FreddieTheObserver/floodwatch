@@ -53,12 +53,8 @@ func (s *TideSyncer) Run(ctx context.Context) {
 			s.log.Warn("tide sync failed", "err", err, "retry_in", tideRetryAfter.String())
 			wait = tideRetryAfter
 		}
-		t := time.NewTimer(wait)
-		select {
-		case <-ctx.Done():
-			t.Stop()
+		if !sleepCtx(ctx, wait) {
 			return
-		case <-t.C:
 		}
 	}
 }

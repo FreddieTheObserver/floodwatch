@@ -118,6 +118,11 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		tides.Run(ctx)
 		return nil
 	})
+	history := collect.NewHistorySyncer(source.ThaiWaterHistory(client), st, log, cfg.FetchTimeout)
+	g.Go(func() error {
+		history.Run(ctx)
+		return nil
+	})
 
 	err = g.Wait()
 	log.Info("floodwatch stopped")

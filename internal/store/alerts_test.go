@@ -307,3 +307,44 @@ func TestSubscriptionsKnowWhenTheyStarted(t *testing.T) {
 		t.Errorf("created at = %v, want the time it was saved", subs[0].CreatedAt)
 	}
 }
+
+func TestGaugeHistory(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+
+	at := time.Date(2026, 9, 26, 21, 10, 0, 0, ict)
+	if _, err := s.SaveBatch(ctx, waterBatch(ptr(2.16), 1.32, at)); err != nil {
+		t.Fatal(err)
+	}
+	rain := source.Batch{Source: "thaiwater", Kind: source.KindRain,
+		Stations: []source.Station{{ExternalID: "9", Name: "Krung Thep 3", Lat: 13.6, Lng: 100.5}},
+		Rain:     []source.RainReading{{ExternalID: "9", ObservedAt: at, Rain1h: ptr(1)}}}
+	if _, err := s.SaveBatch(ctx, rain); err != nil {
+		t.Fatal(err)
+	}
+
+	gauges, err := s.ReportingWaterStations(ctx, "thaiwater", at.Add(-time.Hour))
+	if err != nil || len(gauges) != 1 || gauges[0].ExternalID != "1" {
+		t.Fatalf("reporting gauges = %+v, %v; want only the water gauge", gauges, err)
+	}
+	if silent, _ := s.ReportingWaterStations(ctx, "thaiwater", at.Add(time.Minute)); len(silent) != 0 {
+		t.Errorf("a gauge silent since then was listed: %+v", silent)
+	}
+
+	history := []source.WaterReading{
+		{ObservedAt: at.Add(-20 * time.Minute), LevelMSL: 1.40},
+		{ObservedAt: at.Add(-10 * time.Minute), LevelMSL: 1.36},
+		{ObservedAt: at, LevelMSL: 9.99},
+	}
+	// The second fill finds everything already stored.
+	for i, want := range []int64{2, 0} {
+		added, err := s.SaveWaterHistory(ctx, gauges[0].ID, history)
+		if err != nil || added != want {
+			t.Errorf("fill %d added %d, %v; want %d", i+1, added, err, want)
+		}
+	}
+	var level float64
+	if err := s.pool.QueryRow(ctx, `SELECT level_msl FROM water_readings WHERE observed_at = $1`, at).Scan(&level); err != nil || level != 1.32 {
+		t.Errorf("polled reading = %v, %v; want it kept over the history's", level, err)
+	}
+}

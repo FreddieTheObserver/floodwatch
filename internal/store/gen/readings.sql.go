@@ -58,3 +58,45 @@ func (q *Queries) InsertWaterReading(ctx context.Context, arg InsertWaterReading
 	}
 	return result.RowsAffected(), nil
 }
+
+const listReportingWaterStations = `-- name: ListReportingWaterStations :many
+SELECT s.id, s.external_id
+  FROM stations s
+ WHERE s.source = $1
+   AND s.kind = 'water'
+   AND EXISTS (SELECT 1
+                 FROM water_readings w
+                WHERE w.station_id = s.id
+                  AND w.observed_at >= $2)
+ ORDER BY s.id
+`
+
+type ListReportingWaterStationsParams struct {
+	Source string
+	Since  time.Time
+}
+
+type ListReportingWaterStationsRow struct {
+	ID         int64
+	ExternalID string
+}
+
+func (q *Queries) ListReportingWaterStations(ctx context.Context, arg ListReportingWaterStationsParams) ([]ListReportingWaterStationsRow, error) {
+	rows, err := q.db.Query(ctx, listReportingWaterStations, arg.Source, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReportingWaterStationsRow{}
+	for rows.Next() {
+		var i ListReportingWaterStationsRow
+		if err := rows.Scan(&i.ID, &i.ExternalID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

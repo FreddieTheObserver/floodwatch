@@ -1,0 +1,144 @@
+{
+ "result": "OK",
+ "data": {
+  "graph_data": [
+   {
+    "datetime": "2026-09-23 10:50",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 21:10",
+    "value": 1.32,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 21:20",
+    "value": 1.28,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 21:30",
+    "value": 1.23,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 21:40",
+    "value": 1.19,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 21:50",
+    "value": 1.15,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 22:00",
+    "value": 1.1,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 22:10",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 22:20",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 22:30",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 22:40",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 22:50",
+    "value": 0.91,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 23:00",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 23:10",
+    "value": 0.84,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 23:20",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 23:30",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 23:40",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-26 23:50",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-27 00:00",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-27 00:10",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-27 00:20",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   },
+   {
+    "datetime": "2026-09-27 00:30",
+    "value": null,
+    "value_out": null,
+    "discharge": null
+   }
+  ],
+  "min_bank": 2.161,
+  "warning_level": null,
+  "critical_level": null,
+  "ground_level": -15.697,
+  "qmax": null
+ }
+}

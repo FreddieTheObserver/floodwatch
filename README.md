@@ -70,6 +70,10 @@ Gauges near the river mouth rise and fall with the tide twice a day.
 The tide predictions are collected so that a gauge's reading can later be split into what the tide explains and what it does not, which is the part that signals flooding.
 Only the three days behind and fourteen days ahead of now are kept, since HII publishes a whole year per file and revises it.
 
+The regular poll sees only each gauge's latest reading, so every 6 hours the collector also fetches the last 3 days of readings of each water gauge that is still reporting, from the series behind ThaiWater's website graphs.
+That fills in whatever happened while FloodWatch was not running, and gives the comparison with the tide days of unbroken readings.
+It asks for one gauge at a time with a pause between, keeps readings it already has, and stops after three failures in a row.
+
 ThaiWater publishes rain hourly and about an hour late, so rain alerts can trail real rainfall by one to two hours.
 Every gauge records the agency that runs it, and any message drawing on BMA gauges credits the department.
 The collector identifies itself in its User-Agent, polls sources one at a time, and backs off a failing source up to once an hour.
@@ -171,7 +175,7 @@ Store tests start their own Postgres with testcontainers, so they need Docker bu
 | Package | Role |
 | --- | --- |
 | `internal/source` | fetch and normalise each feed; fixtures in `testdata` are trimmed real responses |
-| `internal/collect` | poll loop, per-source isolation and backoff, and the tide sync |
+| `internal/collect` | poll loop, per-source isolation and backoff, the tide sync, and the gauge history fill |
 | `internal/alert` | pure rules and the evaluator |
 | `internal/bot` | Telegram sign-up, commands, message rendering and alert delivery |
 | `internal/telegram` | minimal Bot API client that keeps the token out of errors and logs |
