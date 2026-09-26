@@ -36,7 +36,7 @@ type Assessment struct {
 	Risk     Risk
 }
 
-// Digest tells one subscriber that a place's overall risk changed.
+// Digest is one place's assessment beside what its subscriber was last told.
 type Digest struct {
 	Subscription Subscription
 	Assessment
@@ -45,13 +45,17 @@ type Digest struct {
 	From int
 }
 
+// Changed reports whether the subscriber should be alerted: the overall risk
+// is no longer what they were last told.
+func (d Digest) Changed() bool { return d.Risk.Level != d.From }
+
 func riskKey(sub Subscription) Key { return Key{SubscriptionID: sub.ID, Rule: RuleRisk} }
 
-// Evaluate judges every place and returns a digest for each whose overall risk
-// changed since its subscriber was last told. The per-gauge severities behind
+// Evaluate judges every place and returns a digest for each, in subscription
+// order; those that Changed are due as alerts. The per-gauge severities behind
 // each risk are recorded as they stand, since hysteresis works from them; the
-// risk itself is recorded only on Ack, so a digest that fails to send is
-// produced again next time.
+// risk itself is recorded only on Ack, so an alert that fails to send is due
+// again next time.
 func (e *Evaluator) Evaluate(ctx context.Context) ([]Digest, error) {
 	snap, err := e.snapshot(ctx)
 	if err != nil {
@@ -73,9 +77,7 @@ func (e *Evaluator) Evaluate(ctx context.Context) ([]Digest, error) {
 		for k, v := range factorStates(a.Findings) {
 			factors[k] = v
 		}
-		if from := current[riskKey(sub)]; a.Risk.Level != from {
-			out = append(out, Digest{Subscription: sub, Assessment: a, From: from})
-		}
+		out = append(out, Digest{Subscription: sub, Assessment: a, From: current[riskKey(sub)]})
 	}
 	if err := e.store.RecordAlertStates(ctx, factors, false); err != nil {
 		return nil, fmt.Errorf("record gauge states: %w", err)

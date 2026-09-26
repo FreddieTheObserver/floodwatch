@@ -7,6 +7,7 @@ A test fails if any phrase is missing from a language, so no reader can get a me
 The Thai catalogue has had one round of native-speaker review, on 26 September 2026, which reworded the trends, rates, regional labels, source line and disclaimer.
 Its safety wording still needs checking most: the risk names and the actions should use the words Thai residents already know from official flood warnings.
 Two choices made while applying that review should also be confirmed: the rain counterpart ข้อมูลฝนในพื้นที่ of the reviewed ข้อมูลระดับน้ำในพื้นที่, and the reviewed สถานการณ์ prefix extended from แย่ลง to ดีขึ้น and ทรงตัว.
+The messages owning up to time FloodWatch was not running were added on 27 September 2026 and have not been reviewed yet: `Offline`, `OfflinePlaces`, `OfflineStatus` and `LateReply`, with dates written like 25 ก.ย. 23:10 น.
 
 ## How a person's language is chosen
 
@@ -39,6 +40,8 @@ These terms appear throughout, so agree on them first.
 | gauge / station | สถานีวัด | throughout |
 | Measured 17:40 · 20 min ago | วัดเมื่อ 17:40 น. · 20 นาทีที่แล้ว | details |
 | Flooded roads right now | ถนนที่มีน้ำท่วมตอนนี้ | map link |
+| FloodWatch was offline from 23:10 to 07:45 | FloodWatch ไม่ได้ทำงานตั้งแต่ 23:10 น. ถึง 07:45 น. | offline notice |
+| Sorry for the late reply | ขออภัยที่ตอบช้า | late reply |
 | Data: ThaiWater (HII) | แหล่งข้อมูล: ThaiWater (สสน.) | sources |
 | This is not an official warning | ข้อมูลนี้ไม่ใช่ประกาศเตือนภัยอย่างเป็นทางการ | disclaimer |
 | BMA hotline 1555, emergency 1669 | สายด่วน กทม. 1555 · เหตุฉุกเฉิน 1669 | disclaimer |

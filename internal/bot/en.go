@@ -272,4 +272,19 @@ I store only your chat ID, your language and the locations you send. /stop delet
 	DefaultPlace:   func(n int) string { return fmt.Sprintf("Place %d", n) },
 	LanguagePrompt: "Choose a language / เลือกภาษา",
 	LanguageSet:    "Language set to English.",
+
+	When: func(t, now time.Time) string {
+		if sameDay(t, now) {
+			return t.In(ict).Format("15:04")
+		}
+		return t.In(ict).Format("2 Jan 15:04")
+	},
+	Offline: func(from, to, took string) string {
+		return fmt.Sprintf("⚠️ <b>FloodWatch was offline from %s to %s</b> (about %s), so it could not have warned you of anything in that time.", from, to, took)
+	},
+	OfflinePlaces: "It's running again. Your places now:",
+	OfflineStatus: "Send /status for the details.",
+	LateReply: func(at string) string {
+		return "Sorry for the late reply: FloodWatch was offline when you wrote at " + at + "."
+	},
 }

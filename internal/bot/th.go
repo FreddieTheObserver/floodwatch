@@ -294,4 +294,22 @@ FloodWatch เก็บเพียงหมายเลขแชต ภาษ�
 	DefaultPlace:   func(n int) string { return fmt.Sprintf("สถานที่ %d", n) },
 	LanguagePrompt: "เลือกภาษา / Choose a language",
 	LanguageSet:    "ตั้งค่าเป็นภาษาไทยแล้ว",
+
+	When: func(t, now time.Time) string {
+		t = t.In(ict)
+		if sameDay(t, now) {
+			return t.Format("15:04") + " น."
+		}
+		return fmt.Sprintf("%d %s %s น.", t.Day(), thaiMonths[t.Month()-1], t.Format("15:04"))
+	},
+	Offline: func(from, to, took string) string {
+		return fmt.Sprintf("⚠️ <b>FloodWatch ไม่ได้ทำงานตั้งแต่ %s ถึง %s</b> (ประมาณ %s) จึงไม่สามารถแจ้งเตือนคุณได้ในช่วงเวลานั้น", from, to, took)
+	},
+	OfflinePlaces: "ตอนนี้กลับมาทำงานแล้ว สถานการณ์ของสถานที่ของคุณตอนนี้:",
+	OfflineStatus: "ส่ง /status เพื่อดูรายละเอียด",
+	LateReply: func(at string) string {
+		return "ขออภัยที่ตอบช้า FloodWatch ไม่ได้ทำงานตอนที่คุณส่งข้อความมาเมื่อ " + at
+	},
 }
+
+var thaiMonths = [12]string{"ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."}

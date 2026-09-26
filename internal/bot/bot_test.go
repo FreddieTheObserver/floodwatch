@@ -58,6 +58,13 @@ type fakeStore struct {
 	nextID    int64
 	forgotten []string
 	languages map[string]string
+	lastRun   time.Time
+}
+
+func (s *fakeStore) LastAlertRun(context.Context) (time.Time, error) { return s.lastRun, nil }
+func (s *fakeStore) RecordAlertRun(_ context.Context, at time.Time) error {
+	s.lastRun = at
+	return nil
 }
 
 func (s *fakeStore) RecipientLanguage(_ context.Context, _, rcpt string) (string, error) {
@@ -202,7 +209,7 @@ type harness struct {
 
 func newHarness() *harness {
 	h := &harness{api: &fakeAPI{sendErr: map[int64]error{}}, store: &fakeStore{}, eval: &fakeEval{assessment: sampleAssessment()}}
-	h.bot = New(h.api, h.store, h.eval, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h.bot = New(h.api, h.store, h.eval, slog.New(slog.NewTextHandler(io.Discard, nil)), 10*time.Minute)
 	h.bot.now = func() time.Time { return checked }
 	return h
 }
@@ -542,7 +549,7 @@ func TestNotifyReportsBrokenAlerting(t *testing.T) {
 	h = newHarness()
 	h.eval.pending = []alert.Digest{{Subscription: alert.Subscription{ID: 1, Recipient: "42", Label: "Home"}, Assessment: sampleAssessment()}}
 	h.api.sendErr[42] = errors.New("telegram unreachable")
-	if err := h.bot.Notify(context.Background()); err == nil || !strings.Contains(err.Error(), "none of 1 alerts") {
+	if err := h.bot.Notify(context.Background()); err == nil || !strings.Contains(err.Error(), "none of 1 messages") {
 		t.Errorf("no alert delivered = %v, want it reported", err)
 	}
 }

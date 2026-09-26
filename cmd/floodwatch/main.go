@@ -78,7 +78,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		// Past the bot's 50 s long poll, so only a request that has truly hung
 		// is cut off, and a stuck send cannot stall the collector for ever.
 		tg := telegram.New(cfg.TelegramToken, &http.Client{Timeout: 90 * time.Second})
-		b = bot.New(tg, st, alert.NewEvaluator(st, sources), log)
+		b = bot.New(tg, st, alert.NewEvaluator(st, sources), log, cfg.PollInterval)
 		// A rejected token ends the whole process: collecting without ever
 		// alerting would look healthy while doing nothing useful.
 		g.Go(func() error { return b.Run(ctx) })

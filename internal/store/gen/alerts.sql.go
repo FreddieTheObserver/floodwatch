@@ -10,6 +10,18 @@ import (
 	"time"
 )
 
+const getLastAlertRun = `-- name: GetLastAlertRun :one
+SELECT completed_at
+  FROM alert_runs
+`
+
+func (q *Queries) GetLastAlertRun(ctx context.Context) (time.Time, error) {
+	row := q.db.QueryRow(ctx, getLastAlertRun)
+	var completed_at time.Time
+	err := row.Scan(&completed_at)
+	return completed_at, err
+}
+
 const latestRainReadings = `-- name: LatestRainReadings :many
 SELECT s.id AS station_id, r.observed_at, r.rain_1h_mm, r.rain_3h_mm, r.rain_24h_mm
   FROM stations s
@@ -220,6 +232,18 @@ func (q *Queries) RecentWaterReadings(ctx context.Context, since time.Time) ([]R
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordAlertRun = `-- name: RecordAlertRun :exec
+INSERT INTO alert_runs (completed_at)
+VALUES ($1)
+ON CONFLICT (singleton) DO UPDATE
+   SET completed_at = EXCLUDED.completed_at
+`
+
+func (q *Queries) RecordAlertRun(ctx context.Context, completedAt time.Time) error {
+	_, err := q.db.Exec(ctx, recordAlertRun, completedAt)
+	return err
 }
 
 const upsertAlertState = `-- name: UpsertAlertState :exec

@@ -91,6 +91,7 @@ type Subscription struct {
 	Label     string
 	Lat, Lng  float64
 	RadiusM   int
+	CreatedAt time.Time
 }
 
 type Station struct {

@@ -47,6 +47,8 @@ type Store interface {
 	ForgetRecipient(ctx context.Context, channel, recipient string) (int64, error)
 	RecipientLanguage(ctx context.Context, channel, recipient string) (string, error)
 	SetRecipientLanguage(ctx context.Context, channel, recipient, language string) error
+	LastAlertRun(ctx context.Context) (time.Time, error)
+	RecordAlertRun(ctx context.Context, at time.Time) error
 }
 
 type Evaluator interface {
@@ -62,6 +64,8 @@ type Bot struct {
 	eval  Evaluator
 	log   *slog.Logger
 	now   func() time.Time
+
+	offlineAfter time.Duration
 
 	// lastContact is when Telegram last answered a long poll, in Unix
 	// nanoseconds; zero while Run has not started. The poll loop writes it and
@@ -85,8 +89,10 @@ func (b *Bot) Healthy() error {
 	return nil
 }
 
-func New(api API, store Store, eval Evaluator, log *slog.Logger) *Bot {
-	return &Bot{api: api, store: store, eval: eval, log: log, now: time.Now}
+// New makes a bot whose Notify runs after every collector poll, pollInterval
+// apart.
+func New(api API, store Store, eval Evaluator, log *slog.Logger, pollInterval time.Duration) *Bot {
+	return &Bot{api: api, store: store, eval: eval, log: log, now: time.Now, offlineAfter: offlineAfter(pollInterval)}
 }
 
 // Run answers incoming messages until ctx is done. It returns an error only
@@ -128,8 +134,8 @@ func (b *Bot) Run(ctx context.Context) error {
 		b.lastContact.Store(b.now().UnixNano())
 		for _, u := range updates {
 			offset = u.UpdateID + 1
-			b.handle(ctx, u)
 		}
+		b.handleAll(ctx, updates)
 	}
 	return nil
 }
@@ -140,6 +146,27 @@ func sleep(ctx context.Context, d time.Duration) {
 	select {
 	case <-ctx.Done():
 	case <-t.C:
+	}
+}
+
+// A message this old on arrival waited while floodwatch was not running, as
+// Telegram holds messages for a bot for up to a day. The margin allows for the
+// computer's clock being slightly off after it wakes.
+const lateAfter = 5 * time.Minute
+
+// handleAll answers a batch of updates. Anyone whose message waited while
+// floodwatch was not running first gets one apology for the batch.
+func (b *Bot) handleAll(ctx context.Context, updates []telegram.Update) {
+	apologised := map[int64]bool{}
+	for _, u := range updates {
+		if m := u.Message; m != nil && m.Date > 0 && m.Chat.Type == "private" && !apologised[m.Chat.ID] {
+			if sent, now := time.Unix(m.Date, 0), b.now(); now.Sub(sent) > lateAfter {
+				apologised[m.Chat.ID] = true
+				c := b.converse(ctx, m.Chat.ID, m.From)
+				b.send(ctx, c, c.t.LateReply(c.t.When(sent, now)), nil)
+			}
+		}
+		b.handle(ctx, u)
 	}
 }
 

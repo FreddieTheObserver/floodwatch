@@ -352,6 +352,26 @@ func statusText(t *texts, sub alert.Subscription, a alert.Assessment, checked ti
 	return head + "\n\n" + body(t, sub, a, checked, true)
 }
 
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.In(ict).Date()
+	by, bm, bd := b.In(ict).Date()
+	return ay == by && am == bm && ad == bd
+}
+
+// offlineText owns up to a stretch when floodwatch could not have warned a
+// subscriber, and says where each of their places stands now.
+func offlineText(t *texts, from, to time.Time, places []alert.Digest) string {
+	var b strings.Builder
+	b.WriteString(t.Offline(t.When(from, to), t.When(to, to), t.Duration(to.Sub(from).Hours())))
+	b.WriteString("\n\n" + t.OfflinePlaces + "\n")
+	for _, d := range places {
+		line := fmt.Sprintf("%s <b>%s</b>: %s", riskIcons[d.Risk.Level], esc(d.Subscription.Label), t.RiskNames[d.Risk.Level])
+		b.WriteString(withTrend(t, line, d.Risk.Trend) + "\n")
+	}
+	b.WriteString("\n" + t.OfflineStatus)
+	return b.String()
+}
+
 // digestText tells a subscriber that a place's overall risk changed, with the
 // same picture a status gives.
 func digestText(t *texts, d alert.Digest, checked time.Time) string {

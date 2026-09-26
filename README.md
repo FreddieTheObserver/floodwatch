@@ -137,6 +137,11 @@ Details hold only measurements, each with how old it is, plus what moved the tre
 Its Show gauges on map button sends the place and its nearest gauges as map pins that open in the phone's own maps app.
 Status messages, and alerts about a raised risk, link to the BMA's [flooded roads map](https://now.bangkok.go.th/flood-alert.html), since a canal gauge kilometres away cannot say whether your street is under water.
 
+A quiet bot must never pass for a quiet day.
+So when alerts have gone unchecked or undelivered for an hour or more (three polls, if polling is slower), for example because the computer running FloodWatch slept, lost its connection or restarted, the bot owns up once it is running again.
+Everyone with a place is told when it went offline and when it came back, with each place's current risk, before any alert about a risk that changed meanwhile.
+Messages sent to the bot while it was offline, which Telegram holds for up to a day, are answered with an apology for the late reply.
+
 | Command | What it does |
 | --- | --- |
 | `/status` | the flood risk around each of your places, why, and what to do |
@@ -171,5 +176,5 @@ Store tests start their own Postgres with testcontainers, so they need Docker bu
 | `internal/bot` | Telegram sign-up, commands, message rendering and alert delivery |
 | `internal/telegram` | minimal Bot API client that keeps the token out of errors and logs |
 | `internal/health` | reports each poll to the outside watchdog |
-| `internal/store` | Postgres access through sqlc, with embedded goose migrations |
+| `internal/store` | Postgres access through sqlc, with embedded goose migrations; also records when alerts were last delivered |
 | `internal/config` | environment configuration |

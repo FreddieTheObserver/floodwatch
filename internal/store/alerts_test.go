@@ -269,3 +269,41 @@ func TestRecipientLanguage(t *testing.T) {
 		t.Error("an unsupported language was stored")
 	}
 }
+
+func TestAlertRun(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+
+	if last, err := s.LastAlertRun(ctx); !last.IsZero() || err != nil {
+		t.Errorf("before any run = %v, %v; want the zero time", last, err)
+	}
+	first := time.Date(2026, 9, 27, 1, 10, 0, 0, ict)
+	for _, at := range []time.Time{first, first.Add(10 * time.Minute)} {
+		if err := s.RecordAlertRun(ctx, at); err != nil {
+			t.Fatal(err)
+		}
+		if last, err := s.LastAlertRun(ctx); !last.Equal(at) || err != nil {
+			t.Errorf("last run = %v, %v; want %v", last, err, at)
+		}
+	}
+	if n := countRows(t, s, "alert_runs"); n != 1 {
+		t.Errorf("%d rows, want only the latest run kept", n)
+	}
+}
+
+func TestSubscriptionsKnowWhenTheyStarted(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+
+	before := time.Now().Add(-time.Minute)
+	if _, err := s.SaveSubscription(ctx, place("42", "home")); err != nil {
+		t.Fatal(err)
+	}
+	subs, err := s.ListSubscriptions(ctx)
+	if err != nil || len(subs) != 1 {
+		t.Fatalf("subscriptions = %v, %v", subs, err)
+	}
+	if subs[0].CreatedAt.Before(before) {
+		t.Errorf("created at = %v, want the time it was saved", subs[0].CreatedAt)
+	}
+}

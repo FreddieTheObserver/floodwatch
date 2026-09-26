@@ -135,6 +135,13 @@ type texts struct {
 	DefaultPlace      func(n int) string
 	LanguagePrompt    string
 	LanguageSet       string
+
+	// Owning up to time floodwatch was not running.
+	When          func(t, now time.Time) string // a time of day, dated unless it is today
+	Offline       func(from, to, took string) string
+	OfflinePlaces string
+	OfflineStatus string
+	LateReply     func(at string) string
 }
 
 var languages = map[string]*texts{english.Code: &english, thai.Code: &thai}

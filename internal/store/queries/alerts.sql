@@ -54,3 +54,13 @@ ON CONFLICT ON CONSTRAINT alert_states_key DO UPDATE
    SET severity    = EXCLUDED.severity,
        changed_at  = now(),
        notified_at = COALESCE(EXCLUDED.notified_at, alert_states.notified_at);
+
+-- name: GetLastAlertRun :one
+SELECT completed_at
+  FROM alert_runs;
+
+-- name: RecordAlertRun :exec
+INSERT INTO alert_runs (completed_at)
+VALUES (sqlc.arg('completed_at'))
+ON CONFLICT (singleton) DO UPDATE
+   SET completed_at = EXCLUDED.completed_at;

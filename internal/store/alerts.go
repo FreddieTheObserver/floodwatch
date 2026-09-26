@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -118,10 +119,24 @@ func (s *Store) RecordAlertStates(ctx context.Context, states map[alert.Key]int,
 	})
 }
 
+// LastAlertRun is when alerts were last checked and delivered, or the zero
+// time if they never have been.
+func (s *Store) LastAlertRun(ctx context.Context) (time.Time, error) {
+	at, err := s.GetLastAlertRun(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, nil
+	}
+	return at, err
+}
+
+func (s *Store) RecordAlertRun(ctx context.Context, at time.Time) error {
+	return s.Queries.RecordAlertRun(ctx, at)
+}
+
 func subscription(r gen.Subscription) alert.Subscription {
 	return alert.Subscription{
 		ID: r.ID, Channel: r.Channel, Recipient: r.Recipient, Label: r.Label,
-		Lat: r.Lat, Lng: r.Lng, RadiusM: int(r.RadiusM),
+		Lat: r.Lat, Lng: r.Lng, RadiusM: int(r.RadiusM), CreatedAt: r.CreatedAt,
 	}
 }
 

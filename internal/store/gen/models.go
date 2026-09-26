@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+type AlertRun struct {
+	Singleton   bool
+	CompletedAt time.Time
+}
+
 type AlertState struct {
 	SubscriptionID int64
 	StationID      *int64
