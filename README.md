@@ -127,6 +127,18 @@ Create a check with a 10 minute period and a 20 minute grace time, then store it
 read -rsp 'Ping URL: ' u && printf 'FLOODWATCH_HEALTHCHECK_URL=%s\n' "$u" >> .env && unset u
 ```
 
+Stopping floodwatch on purpose need not set the alarm off.
+With a read-write API key, created under the project's Settings in healthchecks.io, `make down` waits for the service to exit and then pauses the check.
+The service's first report after `make up` resumes it, as healthchecks.io resumes a paused check on its next ping unless the check is set to resume only by hand.
+A restart that never gets as far as reporting therefore leaves the check paused, and so does anything else that pauses it.
+The key can change every check in the project, so it stays in `.env` too:
+
+```sh
+read -rsp 'API key: ' k && printf 'FLOODWATCH_HEALTHCHECK_API_KEY=%s\n' "$k" >> .env && unset k
+```
+
+The watchdog still alarms when the computer sleeps, since nothing runs to pause it.
+
 Configuration is read from the environment:
 
 | Variable | Default | Meaning |
@@ -138,6 +150,7 @@ Configuration is read from the environment:
 | `FLOODWATCH_BMA_RAIN_ENABLED` | `false` | poll the BMA rain gauges |
 | `FLOODWATCH_TELEGRAM_TOKEN` | none | bot token from @BotFather; keep it in `.env` |
 | `FLOODWATCH_HEALTHCHECK_URL` | none | watchdog ping URL; keep it in `.env` |
+| `FLOODWATCH_HEALTHCHECK_API_KEY` | none | read-write healthchecks.io API key, letting `make down` pause the watchdog; keep it in `.env` |
 | `FLOODWATCH_TIDE_STATIONS` | `N01,N02,N03,N04,N05` | HII tide stations to collect |
 | `FLOODWATCH_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 

@@ -93,3 +93,19 @@ func TestPollIntervalFloor(t *testing.T) {
 		t.Errorf("5m: %v, %v", cfg.PollInterval, err)
 	}
 }
+
+func TestHealthcheckAPIKey(t *testing.T) {
+	const ping, key = "https://hc-ping.com/0a1b2c3d-secret", "rw-key-not-for-logs"
+	cfg, err := Load(env(map[string]string{"FLOODWATCH_DSN": "postgres://x", "FLOODWATCH_HEALTHCHECK_URL": ping, "FLOODWATCH_HEALTHCHECK_API_KEY": key}))
+	if err != nil || cfg.HealthcheckAPIKey != key {
+		t.Errorf("key = %q, %v", cfg.HealthcheckAPIKey, err)
+	}
+
+	_, err = Load(env(map[string]string{"FLOODWATCH_DSN": "postgres://x", "FLOODWATCH_HEALTHCHECK_API_KEY": key}))
+	if err == nil || !strings.Contains(err.Error(), "FLOODWATCH_HEALTHCHECK_API_KEY") {
+		t.Fatalf("a key with no check to pause = %v, want an error", err)
+	}
+	if strings.Contains(err.Error(), key) {
+		t.Errorf("error leaks the key: %v", err)
+	}
+}

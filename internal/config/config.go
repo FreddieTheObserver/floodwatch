@@ -24,7 +24,11 @@ type Config struct {
 	// The ping URL of an outside watchdog such as healthchecks.io, which
 	// raises the alarm when floodwatch stops reporting. Empty disables it.
 	HealthcheckURL string
-	TideStations   []string
+	// A read-write healthchecks.io API key, which lets stopping floodwatch on
+	// purpose pause the watchdog rather than set it off. Empty leaves every
+	// stop to raise the alarm.
+	HealthcheckAPIKey string
+	TideStations      []string
 }
 
 const (
@@ -60,9 +64,10 @@ func Load(getenv func(string) string) (Config, error) {
 		TideStations: l.codes("FLOODWATCH_TIDE_STATIONS", DefaultTideStations, tideCode, "HII tide station codes such as N02"),
 		// Off until the BMA Drainage Department permits automated access to its
 		// rain gauges; permission was requested on 2026-09-26.
-		BMARain:        l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
-		TelegramToken:  l.text("FLOODWATCH_TELEGRAM_TOKEN", ""),
-		HealthcheckURL: l.text("FLOODWATCH_HEALTHCHECK_URL", ""),
+		BMARain:           l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
+		TelegramToken:     l.text("FLOODWATCH_TELEGRAM_TOKEN", ""),
+		HealthcheckURL:    l.text("FLOODWATCH_HEALTHCHECK_URL", ""),
+		HealthcheckAPIKey: l.text("FLOODWATCH_HEALTHCHECK_API_KEY", ""),
 	}
 	if cfg.DSN == "" {
 		l.errs = append(l.errs, errors.New("FLOODWATCH_DSN is required"))
@@ -70,6 +75,9 @@ func Load(getenv func(string) string) (Config, error) {
 	// The value is not echoed back, as anyone holding it can forge pings.
 	if u, err := url.Parse(cfg.HealthcheckURL); cfg.HealthcheckURL != "" && (err != nil || u.Scheme != "https" || u.Host == "") {
 		l.errs = append(l.errs, errors.New("FLOODWATCH_HEALTHCHECK_URL must be an https URL"))
+	}
+	if cfg.HealthcheckAPIKey != "" && cfg.HealthcheckURL == "" {
+		l.errs = append(l.errs, errors.New("FLOODWATCH_HEALTHCHECK_API_KEY is set without FLOODWATCH_HEALTHCHECK_URL, the check it would pause"))
 	}
 	return cfg, errors.Join(l.errs...)
 }

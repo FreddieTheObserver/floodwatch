@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -31,12 +32,41 @@ func main() {
 	// After the first signal starts a graceful shutdown, a second one kills.
 	context.AfterFunc(ctx, stop)
 
-	err := run(ctx, os.Getenv, os.Stdout)
+	var err error
+	switch args := os.Args[1:]; {
+	case len(args) == 0:
+		err = run(ctx, os.Getenv, os.Stdout)
+	case len(args) == 1 && args[0] == "pause-watchdog":
+		err = pauseWatchdog(ctx, os.Getenv, os.Stdout)
+	default:
+		err = errors.New("usage: floodwatch [pause-watchdog]")
+	}
 	stop()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "floodwatch: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// pauseWatchdog is for stopping floodwatch on purpose: it pauses the outside
+// watchdog, which the service's next report after starting rearms.
+func pauseWatchdog(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
+	cfg, err := config.Load(getenv)
+	if err != nil {
+		return err
+	}
+	switch {
+	case cfg.HealthcheckURL == "":
+		fmt.Fprintln(stdout, "no watchdog is set up, so there is nothing to pause")
+		return nil
+	case cfg.HealthcheckAPIKey == "":
+		return errors.New("FLOODWATCH_HEALTHCHECK_API_KEY is not set, so the watchdog cannot be paused")
+	}
+	if err := health.Pause(ctx, &http.Client{Timeout: 10 * time.Second}, cfg.HealthcheckURL, cfg.HealthcheckAPIKey); err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, "watchdog paused until floodwatch runs again")
+	return nil
 }
 
 func run(ctx context.Context, getenv func(string) string, stdout io.Writer) error {

@@ -64,8 +64,16 @@ up: build
 		echo "started; watch it with: tmux attach -t floodwatch"; \
 	fi
 
-down:
-	@tmux kill-session -t floodwatch 2>/dev/null && echo stopped || echo "not running"
+# Stops the service, then pauses the watchdog once it has exited, so that a
+# report still in flight cannot rearm it. The first report after make up does.
+down: build
+	@if tmux kill-session -t floodwatch 2>/dev/null; then \
+		for _ in $$(seq 30); do pgrep -x floodwatch >/dev/null || break; sleep 0.5; done; \
+		echo stopped; \
+	else \
+		echo "not running"; \
+	fi
+	@$(LOAD_ENV) ./bin/floodwatch pause-watchdog || echo "the watchdog will email you that floodwatch is down"
 
 clean:
 	rm -rf bin
