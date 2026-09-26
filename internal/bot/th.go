@@ -8,9 +8,9 @@ import (
 	"github.com/FreddieTheObserver/floodwatch/internal/telegram"
 )
 
-// thai is a first draft awaiting review by a native speaker; its safety
-// wording in particular (the risk names and actions) should match the terms
-// Thai residents know from official flood warnings.
+// thai has had one round of native-speaker review (26 September 2026); the
+// risk names and actions still need checking against the terms Thai
+// residents know from official flood warnings.
 var thai = texts{
 	Code: "th",
 
@@ -58,7 +58,7 @@ var thai = texts{
 		{"ย้ายรถและของมีค่าขึ้นที่สูงทันที", "หลีกเลี่ยงถนนที่มีน้ำท่วม", "ปฏิบัติตามคำแนะนำของ กทม. (สายด่วน 1555)"},
 		{"ติดตามประกาศทางการของ กทม.", "ตรวจสอบแผนที่น้ำท่วมก่อนออกเดินทาง"},
 	},
-	Trends: [4]string{"", "↘ ดีขึ้น", "→ ทรงตัว", "↗ แย่ลง"},
+	Trends: [4]string{"", "↘ สถานการณ์ดีขึ้น", "→ สถานการณ์ทรงตัว", "↗ สถานการณ์แย่ลง"},
 	Headline: func(icon, risk, label string) string {
 		return fmt.Sprintf("%s <b>%s</b> บริเวณ <b>%s</b>", icon, risk, label)
 	},
@@ -82,9 +82,10 @@ var thai = texts{
 
 	StationAway: func(name, distance string) string { return fmt.Sprintf("%s ห่าง %s", name, distance) },
 	OutsideRadius: func(radius string) string {
-		return fmt.Sprintf(" (นอกรัศมี %s ของคุณ)", radius)
+		return fmt.Sprintf(" (นอกรัศมี %s จากพื้นที่ของคุณ)", radius)
 	},
-	Regional: "ข้อมูลระดับพื้นที่: ",
+	RegionalWater: "ข้อมูลระดับน้ำในพื้นที่: ",
+	RegionalRain:  "ข้อมูลฝนในพื้นที่: ",
 	Bank: func(level, bank float64) string {
 		switch d := level - bank; {
 		case d >= 0.005:
@@ -108,7 +109,7 @@ var thai = texts{
 	Rise: func(rate float64) string {
 		switch {
 		case rate >= 1:
-			return fmt.Sprintf("สูงขึ้น %.0f ซม./ชม.", rate)
+			return fmt.Sprintf("เพิ่มขึ้น %.0f ซม./ชม.", rate)
 		case rate <= -1:
 			return fmt.Sprintf("ลดลง %.0f ซม./ชม.", -rate)
 		default:
@@ -158,7 +159,7 @@ var thai = texts{
 	NoFreshRain: "ไม่มีข้อมูลฝนล่าสุดจากสถานีใกล้เคียง",
 	StationLabel: func(name, distance string, regional bool) string {
 		if regional {
-			return fmt.Sprintf("%s (%s, ระดับพื้นที่)", name, distance)
+			return fmt.Sprintf("%s (%s, นอกรัศมี)", name, distance)
 		}
 		return fmt.Sprintf("%s (%s)", name, distance)
 	},
@@ -174,32 +175,32 @@ var thai = texts{
 	Measured:   func(at, ago string) string { return fmt.Sprintf("วัดเมื่อ %s · %s", at, ago) },
 	RainTotals: [3]string{"1 ชั่วโมง", "3 ชั่วโมง", "24 ชั่วโมง"},
 	WettestOf: func(n int) string {
-		return fmt.Sprintf("ฝนมากที่สุดจาก %d สถานีใกล้เคียงที่ส่งข้อมูล", n)
+		return fmt.Sprintf("มีปริมาณฝนสูงสุดเมื่อเทียบกับ %d สถานีใกล้เคียงที่ส่งข้อมูล", n)
 	},
 	RegionalNote: func(radius string) string {
-		return fmt.Sprintf("สถานีที่ระบุว่าระดับพื้นที่อยู่นอกรัศมี %s ของคุณ แต่แสดงไว้เพราะอาจบ่งบอกสถานการณ์น้ำท่วมในพื้นที่โดยรวม", radius)
+		return fmt.Sprintf("สถานีที่อยู่นอกรัศมี %s จากพื้นที่ของคุณ แสดงไว้เพราะอาจบ่งบอกสถานการณ์น้ำท่วมในภาพรวม", radius)
 	},
 	TrendUnknown: "ไม่ทราบ: ไม่มีข้อมูลล่าสุดให้ประเมิน",
-	TrendSteady:  "ทรงตัว: ไม่มีการเปลี่ยนแปลงสำคัญในชั่วโมงที่ผ่านมา",
-	TrendWorse:   "แย่ลง",
-	TrendBetter:  "ดีขึ้น",
+	TrendSteady:  "สถานการณ์ทรงตัว: ไม่มีการเปลี่ยนแปลงสำคัญในชั่วโมงที่ผ่านมา",
+	TrendWorse:   "สถานการณ์แย่ลง",
+	TrendBetter:  "สถานการณ์ดีขึ้น",
 	WorseRain: func(station, amount string) string {
-		return fmt.Sprintf("แย่ลงเพราะฝนที่ %s หนักขึ้น (%s ในชั่วโมงที่ผ่านมา)", station, amount)
+		return fmt.Sprintf("สถานการณ์แย่ลงเพราะฝนที่ %s หนักขึ้น (%s ในชั่วโมงที่ผ่านมา)", station, amount)
 	},
 	WorseWater: func(station, rise string) string {
-		return fmt.Sprintf("แย่ลงเพราะน้ำที่ %s %s", station, rise)
+		return fmt.Sprintf("สถานการณ์แย่ลงเพราะน้ำที่ %s %s", station, rise)
 	},
 	BetterRain: func(station string) string {
-		return fmt.Sprintf("ดีขึ้นเพราะฝนที่ %s เบาลง", station)
+		return fmt.Sprintf("สถานการณ์ดีขึ้นเพราะฝนที่ %s เบาลง", station)
 	},
 	BetterWater: func(station, rise string) string {
-		return fmt.Sprintf("ดีขึ้นเพราะน้ำที่ %s %s", station, rise)
+		return fmt.Sprintf("สถานการณ์ดีขึ้นเพราะน้ำที่ %s %s", station, rise)
 	},
 	WaterGauges: "สถานีวัดระดับน้ำ",
 	RainGauges:  "สถานีวัดฝน",
-	DataVia:     "ข้อมูลจาก: ThaiWater (สสน.)",
+	DataVia:     "แหล่งข้อมูล: ThaiWater (สสน.)",
 	Checked:     func(at string) string { return "ตรวจสอบล่าสุด " + at },
-	Disclaimer: "<i>ข้อมูลไม่เป็นทางการ อาจล่าช้า ไม่ครบถ้วน หรือคลาดเคลื่อน\n" +
+	Disclaimer: "<i>ข้อมูลนี้ไม่ใช่ประกาศเตือนภัยอย่างเป็นทางการ อาจล่าช้า ไม่ครบถ้วน หรือคลาดเคลื่อน\n" +
 		"ข้อมูลทางการ: สายด่วน กทม. 1555 · เหตุฉุกเฉิน 1669</i>",
 	RainPinWindows: [3]string{"1 ชม.", "3 ชม.", "24 ชม."},
 	RainPinAmount:  func(amount, window string) string { return amount + " ใน " + window },

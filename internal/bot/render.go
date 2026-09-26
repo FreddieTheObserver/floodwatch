@@ -126,7 +126,10 @@ func driverText(t *texts, f alert.Finding, sub alert.Subscription) string {
 	station := t.StationAway(esc(t.stationName(f.Station)), t.Distance(f.DistanceM))
 	prefix := ""
 	if regional(f, sub) {
-		prefix = t.Regional
+		prefix = t.RegionalWater
+		if f.Rule == alert.RuleRain {
+			prefix = t.RegionalRain
+		}
 		station += t.OutsideRadius(radius(t, sub))
 	}
 

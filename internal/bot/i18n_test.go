@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/FreddieTheObserver/floodwatch/internal/alert"
 	"github.com/FreddieTheObserver/floodwatch/internal/telegram"
@@ -100,7 +101,7 @@ func TestAlertsUseTheRecipientsLanguage(t *testing.T) {
 	if err := h.bot.Notify(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if got := h.api.last(t).Text; !strings.Contains(got, "<b>Home: เฝ้าระวัง → เตือนภัย</b> · ↗ แย่ลง") {
+	if got := h.api.last(t).Text; !strings.Contains(got, "<b>Home: เฝ้าระวัง → เตือนภัย</b> · ↗ สถานการณ์แย่ลง") {
 		t.Errorf("alert to a Thai reader:\n%s", got)
 	}
 }
@@ -122,16 +123,17 @@ func thaiAssessment() alert.Assessment {
 func TestThaiStatus(t *testing.T) {
 	text := statusText(&thai, home, thaiAssessment(), checked)
 	inOrder(t, text,
-		"🟡 <b>เฝ้าระวัง</b> บริเวณ <b>Home</b> · ↘ ดีขึ้น",
+		"🟡 <b>เฝ้าระวัง</b> บริเวณ <b>Home</b> · ↘ สถานการณ์ดีขึ้น",
 		"กรุงเทพ 3 ห่าง 4.9 กม. วัดปริมาณฝนได้ 124 มม. ใน 24 ชั่วโมงที่ผ่านมา เกินเกณฑ์ 90 มม. ของ FloodWatch และ 0.5 มม. ในชั่วโมงที่ผ่านมา",
 		"<b>สิ่งที่ควรทำ</b>\n• ติดตามข่าวสารอย่างต่อเนื่อง",
 		thai.FloodRoads,
 		"<blockquote expandable><b>รายละเอียด</b>",
-		"<b>ระดับน้ำ</b>\nเจ้าพระยา 15 (5.4 กม., ระดับพื้นที่)\nต่ำกว่าตลิ่ง 1.82 ม.\nวัดเมื่อ 13:30 น. · 50 นาทีที่แล้ว",
+		"<b>ระดับน้ำ</b>\nเจ้าพระยา 15 (5.4 กม., นอกรัศมี)\nต่ำกว่าตลิ่ง 1.82 ม.\nวัดเมื่อ 13:30 น. · 50 นาทีที่แล้ว",
 		"<b>ฝน</b>\nกรุงเทพ 3 (4.9 กม.)\n1 ชั่วโมง: 0.5 มม.\n24 ชั่วโมง: 124 มม.",
-		"นอกรัศมี 5 กม. ของคุณ",
-		"<b>แนวโน้ม</b>\nดีขึ้นเพราะฝนที่ กรุงเทพ 3 เบาลง",
-		"<b>แหล่งข้อมูล</b>\nสถานีวัดระดับน้ำ: HII\nสถานีวัดฝน: HII\nข้อมูลจาก: ThaiWater (สสน.)",
+		"มีปริมาณฝนสูงสุดเมื่อเทียบกับ 7 สถานีใกล้เคียงที่ส่งข้อมูล",
+		"สถานีที่อยู่นอกรัศมี 5 กม. จากพื้นที่ของคุณ",
+		"<b>แนวโน้ม</b>\nสถานการณ์ดีขึ้นเพราะฝนที่ กรุงเทพ 3 เบาลง",
+		"<b>แหล่งข้อมูล</b>\nสถานีวัดระดับน้ำ: HII\nสถานีวัดฝน: HII\nแหล่งข้อมูล: ThaiWater (สสน.)",
 		"ตรวจสอบล่าสุด 14:20 น.",
 		thai.Disclaimer,
 	)
@@ -193,5 +195,22 @@ func TestStopForgetsTheLanguage(t *testing.T) {
 	h.tap("stop:yes")
 	if _, ok := h.store.languages["42"]; ok {
 		t.Error("the language outlived /stop")
+	}
+}
+
+// A distant rain gauge must not be introduced as water-level information,
+// which is what the Thai for a distant water gauge says.
+func TestThaiRegionalPrefixNamesTheKindOfReading(t *testing.T) {
+	water := waterDriver(alert.RuleWaterRising, 2.07, 26, 6.6)
+	rain := rainDriver("ส.วัดไทร", 7.2, 24*time.Hour, alert.SeverityWatch, ptr(0), ptr(96.5))
+	cases := map[string]alert.Finding{
+		"ข้อมูลระดับน้ำในพื้นที่: Khlong Lat Bang Yo 1 Gate ห่าง 6.6 กม. (นอกรัศมี 5 กม. จากพื้นที่ของคุณ) ระดับน้ำสูงกว่าตลิ่ง 0.56 ม. และยังเพิ่มขึ้น 26 ซม./ชม.":                              water,
+		"ข้อมูลฝนในพื้นที่: ส.วัดไทร ห่าง 7.2 กม. (นอกรัศมี 5 กม. จากพื้นที่ของคุณ) วัดปริมาณฝนได้ 96.5 มม. ใน 24 ชั่วโมงที่ผ่านมา เกินเกณฑ์ 90 มม. ของ FloodWatch และ 0 มม. ในชั่วโมงที่ผ่านมา": rain,
+	}
+	for want, driver := range cases {
+		a := alert.Assessment{Risk: alert.Risk{Level: alert.SeverityWarning, Drivers: []alert.Finding{driver}}}
+		if got := happeningText(&thai, home, a); got != want {
+			t.Errorf("\n got  %q\n want %q", got, want)
+		}
 	}
 }

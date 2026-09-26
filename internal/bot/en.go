@@ -73,7 +73,8 @@ var english = texts{
 
 	StationAway:   func(name, distance string) string { return fmt.Sprintf("%s, %s away", name, distance) },
 	OutsideRadius: func(radius string) string { return fmt.Sprintf(" (outside your %s radius)", radius) },
-	Regional:      "Regional: ",
+	RegionalWater: "Regional: ",
+	RegionalRain:  "Regional: ",
 	Bank: func(level, bank float64) string {
 		switch d := level - bank; {
 		case d >= 0.005:

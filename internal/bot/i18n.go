@@ -37,9 +37,12 @@ type texts struct {
 	NoRecentData  func(label string) string
 
 	// What is happening, stated as measurements.
-	StationAway      func(name, distance string) string
-	OutsideRadius    func(radius string) string
-	Regional         string
+	StationAway   func(name, distance string) string
+	OutsideRadius func(radius string) string
+	// Mark what is said about a station beyond the radius; Thai names the
+	// kind of reading, which differs between water and rain.
+	RegionalWater    string
+	RegionalRain     string
 	Bank             func(level, bank float64) string // a bare measurement
 	BankSentence     func(level, bank float64) string // the same inside a sentence
 	Rise             func(cmPerHour float64) string
