@@ -8,6 +8,7 @@ The Thai catalogue has had one round of native-speaker review, on 26 September 2
 Its safety wording still needs checking most: the risk names and the actions should use the words Thai residents already know from official flood warnings.
 Two choices made while applying that review should also be confirmed: the rain counterpart ข้อมูลฝนในพื้นที่ of the reviewed ข้อมูลระดับน้ำในพื้นที่, and the reviewed สถานการณ์ prefix extended from แย่ลง to ดีขึ้น and ทรงตัว.
 The messages owning up to time FloodWatch was not running were added on 27 September 2026 and have not been reviewed yet: `Offline`, `OfflinePlaces`, `OfflineStatus` and `LateReply`, with dates written like 25 ก.ย. 23:10 น.
+Nor have the tide forecasts added the same day: `TideHigh`, `TideRising`, `TideFalling` and `TidePredictions`, which must read as expectations rather than measurements.
 
 ## How a person's language is chosen
 
@@ -42,6 +43,11 @@ These terms appear throughout, so agree on them first.
 | Flooded roads right now | ถนนที่มีน้ำท่วมตอนนี้ | map link |
 | FloodWatch was offline from 23:10 to 07:45 | FloodWatch ไม่ได้ทำงานตั้งแต่ 23:10 น. ถึง 07:45 น. | offline notice |
 | Sorry for the late reply | ขออภัยที่ตอบช้า | late reply |
+| Tide forecast | คาดการณ์น้ำขึ้นน้ำลง | tide forecast |
+| at high water around 18:10 | เมื่อน้ำขึ้นสูงสุดราว 18:10 น. | tide forecast |
+| should be about 0.35 m below its bank | คาดว่าจะต่ำกว่าตลิ่งประมาณ 0.35 ม. | tide forecast |
+| the tide is coming in / going out | น้ำกำลังขึ้น / น้ำกำลังลง | tide forecast |
+| Tide predictions: HII | ข้อมูลน้ำขึ้นน้ำลง: สสน. | sources |
 | Data: ThaiWater (HII) | แหล่งข้อมูล: ThaiWater (สสน.) | sources |
 | This is not an official warning | ข้อมูลนี้ไม่ใช่ประกาศเตือนภัยอย่างเป็นทางการ | disclaimer |
 | BMA hotline 1555, emergency 1669 | สายด่วน กทม. 1555 · เหตุฉุกเฉิน 1669 | disclaimer |

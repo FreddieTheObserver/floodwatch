@@ -123,6 +123,17 @@ type Snapshot struct {
 	LatestWater map[int64]WaterPoint // newest reading within AliveWithin
 	LatestRain  map[int64]RainPoint  // newest reading within AliveWithin
 	RecentWater map[int64][]WaterPoint
+	Forecasts   map[int64]TideForecast
+}
+
+// TideForecast is the highest level a tidal gauge is expected to reach over
+// the next hours, forecast from the predicted tide and its reading at BasedOn.
+// It informs what subscribers are told but, until forecasts have proved
+// themselves against what gauges went on to do, sets no severity.
+type TideForecast struct {
+	BasedOn   time.Time
+	PeakAt    time.Time
+	PeakLevel float64
 }
 
 // Key identifies one thing a subscriber can be told about. StationID is 0 for
@@ -156,6 +167,8 @@ type Finding struct {
 	// agencies running them, each of which is owed credit for its data.
 	FreshGauges int
 	Agencies    []string
+	// For a tidal water gauge, the forecast made from the reading judged.
+	Forecast *TideForecast
 }
 
 // Assess judges every rule for one place. current holds the severities last
@@ -259,6 +272,10 @@ func assessWater(snap Snapshot, sub Subscription, n nearby, current map[Key]int)
 		levelOf(aboveBank, waterLevelThresholds),
 		levelOf(aboveBank+waterHysteresisM, waterLevelThresholds),
 		current[level.Key])
+
+	if fc, ok := snap.Forecasts[n.ID]; ok && fc.BasedOn.Equal(latest.At) {
+		level.Forecast, rising.Forecast = &fc, &fc
+	}
 
 	if rate, ok := riseRate(snap.RecentWater[n.ID], latest); ok {
 		level.RiseCmPerHour, rising.RiseCmPerHour = &rate, &rate

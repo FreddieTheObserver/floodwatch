@@ -304,3 +304,38 @@ func TestNoCoverageIsSilent(t *testing.T) {
 		t.Errorf("a place with no stations in reach has risk %+v, want unknown", risk)
 	}
 }
+
+func TestAForecastGoesWithTheReadingItWasMadeFrom(t *testing.T) {
+	forecastOf := func(snap Snapshot) (*TideForecast, int) {
+		for _, f := range Assess(snap, home, nil) {
+			if f.Rule == RuleWaterLevel {
+				return f.Forecast, f.Severity
+			}
+		}
+		t.Fatal("no water level finding")
+		return nil, 0
+	}
+	f := newFixture().water(north(1, source.KindWater, 1, mm(2)), at(10*time.Minute, 1.7), at(0, 1.75))
+	_, without := forecastOf(f.snap)
+
+	// Over the bank at high water, yet only told, not judged, for now.
+	f.snap.Forecasts = map[int64]TideForecast{1: {BasedOn: now, PeakAt: now.Add(3 * time.Hour), PeakLevel: 2.1}}
+	fc, severity := forecastOf(f.snap)
+	if fc == nil || fc.PeakLevel != 2.1 {
+		t.Errorf("forecast = %+v, want the one made from the latest reading", fc)
+	}
+	if severity != without {
+		t.Errorf("severity = %d with the forecast, %d without; forecasts must not set it yet", severity, without)
+	}
+
+	f.snap.Forecasts[1] = TideForecast{BasedOn: now.Add(-10 * time.Minute), PeakAt: now.Add(3 * time.Hour), PeakLevel: 2.1}
+	if fc, _ := forecastOf(f.snap); fc != nil {
+		t.Errorf("a forecast from an earlier reading was used: %+v", fc)
+	}
+
+	stale := newFixture().water(north(1, source.KindWater, 1, mm(2)), at(4*time.Hour, 1.75))
+	stale.snap.Forecasts = map[int64]TideForecast{1: {BasedOn: now.Add(-4 * time.Hour), PeakAt: now.Add(-time.Hour), PeakLevel: 2.1}}
+	if fc, _ := forecastOf(stale.snap); fc != nil {
+		t.Errorf("a silent gauge carried a forecast: %+v", fc)
+	}
+}

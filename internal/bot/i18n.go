@@ -50,6 +50,12 @@ type texts struct {
 	WaterRising      func(station, bank, rise, eta string) string
 	WaterStillRising func(station, bank, rise string) string
 	WaterHeld        func(station, bank, at string) string
+	// Tide forecasts, worded as expectations rather than measurements. The
+	// level is the forecast highest, set against the bank.
+	TideHigh        func(station, at string, level, bank float64) string
+	TideRising      func(station, until string, level, bank float64) string
+	TideFalling     func(station string, hours int) string
+	TidePredictions string
 	// RainRecorded states a total against the threshold it crossed; lastHour
 	// is the last hour's total when the window is longer, and empty otherwise.
 	RainRecorded func(station, amount, window, threshold string, above bool, lastHour string) string

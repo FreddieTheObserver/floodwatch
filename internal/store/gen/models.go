@@ -65,6 +65,31 @@ type Subscription struct {
 	CreatedAt time.Time
 }
 
+type TideFit struct {
+	StationID   int64
+	TideStation string
+	LagMinutes  int32
+	InterceptM  float64
+	Gain        float64
+	R           float64
+	ResidualSdM float64
+	Samples     int32
+	FittedFrom  time.Time
+	FittedTo    time.Time
+	FittedAt    time.Time
+}
+
+type TideForecast struct {
+	StationID    int64
+	BasedOn      time.Time
+	PeakAt       time.Time
+	PeakLevelMsl float64
+	OffsetM      float64
+	TideStation  string
+	LagMinutes   int32
+	MadeAt       time.Time
+}
+
 type TidePrediction struct {
 	StationCode string
 	At          time.Time

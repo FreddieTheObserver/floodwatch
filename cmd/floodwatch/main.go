@@ -22,6 +22,7 @@ import (
 	"github.com/FreddieTheObserver/floodwatch/internal/source"
 	"github.com/FreddieTheObserver/floodwatch/internal/store"
 	"github.com/FreddieTheObserver/floodwatch/internal/telegram"
+	"github.com/FreddieTheObserver/floodwatch/internal/tide"
 )
 
 func main() {
@@ -92,10 +93,16 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		log.Warn("FLOODWATCH_HEALTHCHECK_URL is not set; nobody will be told if floodwatch stops working")
 	}
 
+	tideModel := tide.NewModel(st, log)
 	afterPoll := func(ctx context.Context, r collect.PollResult) {
 		var problems []string
 		if !r.Healthy() {
 			problems = append(problems, "no source delivered data")
+		}
+		// Before alerts, so they carry the forecast from the newest readings.
+		// Alerts do not depend on it, so a failure is no reason to alarm.
+		if err := tideModel.Update(ctx); err != nil {
+			log.Warn("tide model update failed", "err", err)
 		}
 		if b != nil {
 			if err := b.Notify(ctx); err != nil {

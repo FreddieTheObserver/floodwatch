@@ -85,16 +85,7 @@ var english = texts{
 			return "at bank level"
 		}
 	},
-	BankSentence: func(level, bank float64) string {
-		switch d := level - bank; {
-		case d >= 0.005:
-			return fmt.Sprintf("%.2f m above its bank", d)
-		case d <= -0.005:
-			return fmt.Sprintf("%.2f m below its bank", -d)
-		default:
-			return "level with its bank"
-		}
-	},
+	BankSentence: bankSentence,
 	Rise: func(rate float64) string {
 		switch {
 		case rate >= 1:
@@ -117,6 +108,16 @@ var english = texts{
 	WaterStillRising: func(station, bank, rise string) string {
 		return fmt.Sprintf("%s, is %s and still %s.", station, bank, rise)
 	},
+	TideHigh: func(station, at string, level, bank float64) string {
+		return fmt.Sprintf("Tide forecast: at high water around %s, %s, should be about %s.", at, station, bankSentence(level, bank))
+	},
+	TideRising: func(station, until string, level, bank float64) string {
+		return fmt.Sprintf("Tide forecast: the tide is coming in; by %s, %s, should be about %s and still rising.", until, station, bankSentence(level, bank))
+	},
+	TideFalling: func(station string, hours int) string {
+		return fmt.Sprintf("Tide forecast: the tide is going out, so %s, should stay below its current level for the next %d hours.", station, hours)
+	},
+	TidePredictions: "Tide predictions: HII",
 	WaterHeld: func(station, bank, at string) string {
 		return fmt.Sprintf("%s, was %s when it last reported at %s and has been silent since.", station, bank, at)
 	},
@@ -287,4 +288,15 @@ I store only your chat ID, your language and the locations you send. /stop delet
 	LateReply: func(at string) string {
 		return "Sorry for the late reply: FloodWatch was offline when you wrote at " + at + "."
 	},
+}
+
+func bankSentence(level, bank float64) string {
+	switch d := level - bank; {
+	case d >= 0.005:
+		return fmt.Sprintf("%.2f m above its bank", d)
+	case d <= -0.005:
+		return fmt.Sprintf("%.2f m below its bank", -d)
+	default:
+		return "level with its bank"
+	}
 }

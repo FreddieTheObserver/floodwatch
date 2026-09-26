@@ -13,6 +13,7 @@ type Store interface {
 	LatestWater(ctx context.Context, since time.Time) (map[int64]WaterPoint, error)
 	RecentWater(ctx context.Context, since time.Time) (map[int64][]WaterPoint, error)
 	LatestRain(ctx context.Context, since time.Time) (map[int64]RainPoint, error)
+	TideForecasts(ctx context.Context, since time.Time) (map[int64]TideForecast, error)
 	AlertStates(ctx context.Context) (map[Key]int, error)
 	RecordAlertStates(ctx context.Context, states map[Key]int, notified bool) error
 }
@@ -152,6 +153,9 @@ func (e *Evaluator) snapshot(ctx context.Context) (Snapshot, error) {
 	// measured back from it.
 	if snap.RecentWater, err = e.store.RecentWater(ctx, now.Add(-waterFresh-RiseMaxSpan)); err != nil {
 		return Snapshot{}, fmt.Errorf("recent water: %w", err)
+	}
+	if snap.Forecasts, err = e.store.TideForecasts(ctx, now.Add(-waterFresh)); err != nil {
+		return Snapshot{}, fmt.Errorf("tide forecasts: %w", err)
 	}
 	return snap, nil
 }

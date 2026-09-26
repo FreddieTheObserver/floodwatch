@@ -64,11 +64,23 @@ Water gauges are sparse, so for many districts the nearest one is several kilome
 | --- | --- | --- |
 | [ThaiWater](https://www.thaiwater.net/) (Hydro-Informatics Institute) | water level and rain gauges for Bangkok and the five surrounding provinces | in use |
 | [BMA Drainage and Sewerage Department](https://weather.bangkok.go.th/) | about 120 rain gauges across Bangkok | used as republished by ThaiWater since 26 September 2026, credited to the department; polling its own site stays off until it permits automated access |
-| [HII tide predictions](https://www.thaiwater.net/water/ocean) | hourly predicted tide, a year ahead, for the Chao Phraya from Bangkok to its mouth and the Tha Chin mouth | collected every 6 hours since 26 September 2026; not yet used in alerts |
+| [HII tide predictions](https://www.thaiwater.net/water/ocean) | hourly predicted tide, a year ahead, for the Chao Phraya from Bangkok to its mouth and the Tha Chin mouth | collected every 6 hours since 26 September 2026; tide forecasts in messages since 27 September 2026, setting no risk yet |
 
-Gauges near the river mouth rise and fall with the tide twice a day.
-The tide predictions are collected so that a gauge's reading can later be split into what the tide explains and what it does not, which is the part that signals flooding.
-Only the three days behind and fourteen days ahead of now are kept, since HII publishes a whole year per file and revises it.
+HII's files cover a whole year and are revised, so each sync stores only the three days behind and fourteen days ahead of now.
+
+## Tide forecasts
+
+Gauges near the river mouths rise and fall with the tide, by a metre or more a day.
+After every poll, FloodWatch fits each water gauge's last 3 days of readings to the tide station and delay that best explain them, as a straight line from the predicted tide to the gauge's level.
+A gauge counts as tidal while that fit explains its readings with a correlation of at least 0.8; on 27 September 2026 that was 5 of the 22 gauges with enough history, all near the Chao Phraya and Tha Chin mouths, while the canal gauges inland follow their pumps and gates instead.
+
+For a tidal gauge, the highest level of the next 6 hours is forecast from the predicted tide, shifted by how far the gauge's last hour of readings sits above or below its fit.
+That shift is the water the tide does not explain, such as flood water coming down the river, and it is assumed to hold over the 6 hours.
+Replaying the day before, with each fit made only from the readings before it, the highest level was forecast within 8 cm on average and within 18 cm 9 times in 10, where assuming no change missed by 45 cm on average.
+
+Messages state the forecast under what is happening, rounded to 5 cm and worded as an expectation, for the tidal gauges behind the risk or else the nearest one watched.
+Forecasts do not yet set any risk.
+Each one is recorded against the reading it was made from, so that after a week or so they can be checked against what the gauges went on to do before they are allowed to.
 
 The regular poll sees only each gauge's latest reading, so every 6 hours the collector also fetches the last 3 days of readings of each water gauge that is still reporting, from the series behind ThaiWater's website graphs.
 That fills in whatever happened while FloodWatch was not running, and gives the comparison with the tide days of unbroken readings.
@@ -177,6 +189,7 @@ Store tests start their own Postgres with testcontainers, so they need Docker bu
 | `internal/source` | fetch and normalise each feed; fixtures in `testdata` are trimmed real responses |
 | `internal/collect` | poll loop, per-source isolation and backoff, the tide sync, and the gauge history fill |
 | `internal/alert` | pure rules and the evaluator |
+| `internal/tide` | fits gauges to the tide and forecasts their highest level |
 | `internal/bot` | Telegram sign-up, commands, message rendering and alert delivery |
 | `internal/telegram` | minimal Bot API client that keeps the token out of errors and logs |
 | `internal/health` | reports each poll to the outside watchdog |

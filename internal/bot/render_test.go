@@ -223,3 +223,70 @@ func TestAgo(t *testing.T) {
 		}
 	}
 }
+
+// tidal is the sample place with a forecast for Chao Phraya 15, made from its
+// 13:30 reading, of its highest level peakIn later.
+func tidal(peakIn time.Duration, peak float64) alert.Assessment {
+	a := sampleAssessment()
+	at := a.Findings[0].At
+	fc := &alert.TideForecast{BasedOn: at, PeakAt: at.Add(peakIn), PeakLevel: peak}
+	for i, f := range a.Findings {
+		if f.StationID == 7 && f.Rule != alert.RuleWaterStale {
+			a.Findings[i].Forecast = fc
+		}
+	}
+	return a
+}
+
+func TestTideForecasts(t *testing.T) {
+	for name, c := range map[string]struct {
+		a    alert.Assessment
+		want string
+	}{
+		"high water ahead": {tidal(4*time.Hour+40*time.Minute, 1.83),
+			"Tide forecast: at high water around 18:10, Chao Phraya 15, 5.4 km away, should be about 0.35 m below its bank."},
+		"still rising at the horizon": {tidal(6*time.Hour, 2.0),
+			"Tide forecast: the tide is coming in; by 19:30, Chao Phraya 15, 5.4 km away, should be about 0.15 m below its bank and still rising."},
+		"going out": {tidal(10*time.Minute, 0.3),
+			"Tide forecast: the tide is going out, so Chao Phraya 15, 5.4 km away, should stay below its current level for the next 6 hours."},
+	} {
+		text := statusText(&english, home, c.a, checked)
+		inOrder(t, text, "recorded 124 mm", c.want, "What to do")
+		if !strings.Contains(details(text), "Tide predictions: HII") {
+			t.Errorf("%s: the tide predictions are not credited:\n%s", name, text)
+		}
+	}
+
+	plain := statusText(&english, home, sampleAssessment(), checked)
+	if strings.Contains(plain, "Tide") {
+		t.Errorf("tide mentioned without a forecast:\n%s", plain)
+	}
+}
+
+func TestTheForecastFollowsTheGaugeBehindTheRisk(t *testing.T) {
+	a := tidal(4*time.Hour, 1.83)
+	gate := waterDriver(alert.RuleWaterLevel, 1.41, 0, 6.9)
+	gate.Forecast = &alert.TideForecast{BasedOn: gate.At, PeakAt: gate.At.Add(3 * time.Hour), PeakLevel: 1.60}
+	a.Findings = append(a.Findings, gate)
+	a.Risk = alert.Risk{Level: alert.SeverityWarning, Trend: alert.TrendStable, Drivers: []alert.Finding{gate}}
+
+	text := statusText(&english, home, a, checked)
+	if !strings.Contains(text, "at high water around 17:10, Khlong Lat Bang Yo 1 Gate, 6.9 km away, should be about 0.10 m above its bank.") {
+		t.Errorf("no forecast for the gauge behind the risk:\n%s", text)
+	}
+	if strings.Contains(text, "Chao Phraya 15, 5.4 km away, should") {
+		t.Errorf("forecast for a gauge not behind the risk:\n%s", text)
+	}
+}
+
+func TestThaiTideForecast(t *testing.T) {
+	text := statusText(&thai, home, tidal(4*time.Hour+40*time.Minute, 1.83), checked)
+	for _, want := range []string{
+		"คาดการณ์น้ำขึ้นน้ำลง: เมื่อน้ำขึ้นสูงสุดราว 18:10 น. ระดับน้ำที่ Chao Phraya 15 ห่าง 5.4 กม. คาดว่าจะต่ำกว่าตลิ่งประมาณ 0.35 ม.",
+		"ข้อมูลน้ำขึ้นน้ำลง: สสน.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}

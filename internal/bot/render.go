@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/FreddieTheObserver/floodwatch/internal/alert"
+	"github.com/FreddieTheObserver/floodwatch/internal/tide"
 )
 
 var ict = time.FixedZone("ICT", 7*60*60)
@@ -109,17 +110,59 @@ func covered(findings []alert.Finding) bool {
 // happeningText says what the measurements show, in words, from whatever set
 // the risk. It interprets nothing beyond naming the threshold crossed.
 func happeningText(t *texts, sub alert.Subscription, a alert.Assessment) string {
-	switch {
-	case a.Risk.Level == alert.RiskUnknown:
+	if a.Risk.Level == alert.RiskUnknown {
 		return t.NoRecentData(esc(sub.Label))
-	case len(a.Risk.Drivers) == 0:
-		return t.NothingRaised(esc(sub.Label))
 	}
-	parts := make([]string, len(a.Risk.Drivers))
-	for i, d := range a.Risk.Drivers {
-		parts[i] = driverText(t, d, sub)
+	var parts []string
+	if len(a.Risk.Drivers) == 0 {
+		parts = append(parts, t.NothingRaised(esc(sub.Label)))
 	}
-	return strings.Join(parts, "\n")
+	for _, d := range a.Risk.Drivers {
+		parts = append(parts, driverText(t, d, sub))
+	}
+	return strings.Join(append(parts, forecastText(t, a)...), "\n")
+}
+
+// A forecast highest this soon is the tide already going out, and one this
+// near the end of the horizon is the tide still coming in.
+const forecastEdge = 20 * time.Minute
+
+// forecastText gives the tide forecast for the tidal gauges behind the risk,
+// or else for the nearest tidal gauge watched.
+func forecastText(t *texts, a alert.Assessment) []string {
+	var picks []alert.Finding
+	seen := map[int64]bool{}
+	for _, d := range a.Risk.Drivers {
+		if d.Forecast != nil && !seen[d.StationID] {
+			seen[d.StationID] = true
+			picks = append(picks, d)
+		}
+	}
+	if len(picks) == 0 {
+		for _, f := range a.Findings {
+			if f.Rule == alert.RuleWaterLevel && f.Forecast != nil && (len(picks) == 0 || f.DistanceM < picks[0].DistanceM) {
+				picks = []alert.Finding{f}
+			}
+		}
+	}
+
+	lines := make([]string, len(picks))
+	for i, f := range picks {
+		station := t.StationAway(esc(t.stationName(f.Station)), t.Distance(f.DistanceM))
+		fc := f.Forecast
+		// Forecasts typically miss by several centimetres, so they are not
+		// stated to the centimetre.
+		level := f.BankMSL + math.Round((fc.PeakLevel-f.BankMSL)/0.05)*0.05
+		switch {
+		case fc.PeakAt.Sub(fc.BasedOn) <= forecastEdge:
+			lines[i] = t.TideFalling(station, int(tide.Horizon.Hours()))
+		case fc.BasedOn.Add(tide.Horizon).Sub(fc.PeakAt) < forecastEdge:
+			lines[i] = t.TideRising(station, t.Clock(fc.PeakAt), level, f.BankMSL)
+		default:
+			lines[i] = t.TideHigh(station, t.Clock(fc.PeakAt), level, f.BankMSL)
+		}
+	}
+	return lines
 }
 
 func driverText(t *texts, f alert.Finding, sub alert.Subscription) string {
@@ -310,7 +353,11 @@ func sourcesText(t *texts, findings []alert.Finding) string {
 	if len(rain) > 0 {
 		lines = append(lines, t.RainGauges+": "+strings.Join(rain, ", "))
 	}
-	return strings.Join(append(lines, t.DataVia), "\n")
+	lines = append(lines, t.DataVia)
+	if slices.ContainsFunc(findings, func(f alert.Finding) bool { return f.Forecast != nil }) {
+		lines = append(lines, t.TidePredictions)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func footer(t *texts, findings []alert.Finding, checked time.Time) string {

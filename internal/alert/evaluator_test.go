@@ -26,6 +26,9 @@ func (m *memStore) RecentWater(context.Context, time.Time) (map[int64][]WaterPoi
 func (m *memStore) LatestRain(context.Context, time.Time) (map[int64]RainPoint, error) {
 	return m.snap.LatestRain, nil
 }
+func (m *memStore) TideForecasts(context.Context, time.Time) (map[int64]TideForecast, error) {
+	return m.snap.Forecasts, nil
+}
 func (m *memStore) AlertStates(context.Context) (map[Key]int, error) {
 	out := make(map[Key]int, len(m.states))
 	for k, v := range m.states {

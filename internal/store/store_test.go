@@ -64,7 +64,7 @@ func newTestStore(t *testing.T) *Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(s.Close)
-	if _, err := s.pool.Exec(t.Context(), `TRUNCATE alert_runs, alert_states, subscriptions, recipients, water_readings, rain_readings, stations, tide_predictions, tide_stations`); err != nil {
+	if _, err := s.pool.Exec(t.Context(), `TRUNCATE alert_runs, alert_states, subscriptions, recipients, tide_forecasts, tide_fits, water_readings, rain_readings, stations, tide_predictions, tide_stations`); err != nil {
 		t.Fatal(err)
 	}
 	return s

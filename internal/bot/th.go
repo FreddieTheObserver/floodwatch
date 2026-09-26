@@ -128,6 +128,16 @@ var thai = texts{
 	WaterStillRising: func(station, bank, rise string) string {
 		return fmt.Sprintf("%s %s และยัง%s", station, bank, rise)
 	},
+	TideHigh: func(station, at string, level, bank float64) string {
+		return fmt.Sprintf("คาดการณ์น้ำขึ้นน้ำลง: เมื่อน้ำขึ้นสูงสุดราว %s ระดับน้ำที่ %s คาดว่าจะ%s", at, station, thaiForecastBank(level, bank))
+	},
+	TideRising: func(station, until string, level, bank float64) string {
+		return fmt.Sprintf("คาดการณ์น้ำขึ้นน้ำลง: น้ำกำลังขึ้น ภายใน %s ระดับน้ำที่ %s คาดว่าจะ%s และยังคงสูงขึ้น", until, station, thaiForecastBank(level, bank))
+	},
+	TideFalling: func(station string, hours int) string {
+		return fmt.Sprintf("คาดการณ์น้ำขึ้นน้ำลง: น้ำกำลังลง ระดับน้ำที่ %s คาดว่าจะไม่สูงกว่าระดับปัจจุบันในอีก %d ชั่วโมงข้างหน้า", station, hours)
+	},
+	TidePredictions: "ข้อมูลน้ำขึ้นน้ำลง: สสน.",
 	WaterHeld: func(station, bank, at string) string {
 		return fmt.Sprintf("%s %s เมื่อส่งข้อมูลครั้งล่าสุดเวลา %s และไม่มีข้อมูลตั้งแต่นั้น", station, bank, at)
 	},
@@ -313,3 +323,14 @@ FloodWatch เก็บเพียงหมายเลขแชต ภาษ�
 }
 
 var thaiMonths = [12]string{"ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."}
+
+func thaiForecastBank(level, bank float64) string {
+	switch d := level - bank; {
+	case d >= 0.005:
+		return fmt.Sprintf("สูงกว่าตลิ่งประมาณ %.2f ม.", d)
+	case d <= -0.005:
+		return fmt.Sprintf("ต่ำกว่าตลิ่งประมาณ %.2f ม.", -d)
+	default:
+		return "ใกล้เคียงกับตลิ่ง"
+	}
+}
