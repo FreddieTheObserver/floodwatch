@@ -11,7 +11,8 @@ import (
 	"testing"
 )
 
-const testToken = "1234567890:AAtestTOKENvalue_ABCDEFGHIJKLMNOPQRSTU"
+// Deliberately not shaped like a real token, so secret scanners stay quiet.
+const testToken = "not-a-real-token-for-tests"
 
 func fakeAPI(t *testing.T, handle func(method string, params map[string]any) string) *Client {
 	t.Helper()
