@@ -65,6 +65,24 @@ func TestLoadReportsEveryProblem(t *testing.T) {
 	}
 }
 
+func TestHealthcheckURL(t *testing.T) {
+	const ping = "https://hc-ping.com/0a1b2c3d-secret"
+	cfg, err := Load(env(map[string]string{"FLOODWATCH_DSN": "postgres://x", "FLOODWATCH_HEALTHCHECK_URL": ping}))
+	if err != nil || cfg.HealthcheckURL != ping {
+		t.Errorf("url = %q, %v", cfg.HealthcheckURL, err)
+	}
+
+	const bad = "http://hc-ping.com/0a1b2c3d-secret"
+	_, err = Load(env(map[string]string{"FLOODWATCH_DSN": "postgres://x", "FLOODWATCH_HEALTHCHECK_URL": bad}))
+	if err == nil || !strings.Contains(err.Error(), "FLOODWATCH_HEALTHCHECK_URL") {
+		t.Fatalf("plain http accepted: %v", err)
+	}
+	// Anyone holding the URL can forge pings, so errors never repeat it.
+	if strings.Contains(err.Error(), "secret") {
+		t.Errorf("error leaks the URL: %v", err)
+	}
+}
+
 func TestPollIntervalFloor(t *testing.T) {
 	cfg, err := Load(env(map[string]string{"FLOODWATCH_DSN": "postgres://x", "FLOODWATCH_POLL_INTERVAL": "5m"}))
 	if err != nil || cfg.PollInterval != 5*time.Minute {

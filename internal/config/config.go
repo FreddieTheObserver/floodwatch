@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -20,6 +21,9 @@ type Config struct {
 	BMARain      bool
 	// Empty runs the collector alone, without the bot or alerts.
 	TelegramToken string
+	// The ping URL of an outside watchdog such as healthchecks.io, which
+	// raises the alarm when floodwatch stops reporting. Empty disables it.
+	HealthcheckURL string
 }
 
 const (
@@ -47,11 +51,16 @@ func Load(getenv func(string) string) (Config, error) {
 		Provinces:    l.provinces("FLOODWATCH_PROVINCES", DefaultProvinces),
 		// Off until the BMA Drainage Department permits automated access to its
 		// rain gauges; permission was requested on 2026-09-26.
-		BMARain:       l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
-		TelegramToken: l.text("FLOODWATCH_TELEGRAM_TOKEN", ""),
+		BMARain:        l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
+		TelegramToken:  l.text("FLOODWATCH_TELEGRAM_TOKEN", ""),
+		HealthcheckURL: l.text("FLOODWATCH_HEALTHCHECK_URL", ""),
 	}
 	if cfg.DSN == "" {
 		l.errs = append(l.errs, errors.New("FLOODWATCH_DSN is required"))
+	}
+	// The value is not echoed back, as anyone holding it can forge pings.
+	if u, err := url.Parse(cfg.HealthcheckURL); cfg.HealthcheckURL != "" && (err != nil || u.Scheme != "https" || u.Host == "") {
+		l.errs = append(l.errs, errors.New("FLOODWATCH_HEALTHCHECK_URL must be an https URL"))
 	}
 	return cfg, errors.Join(l.errs...)
 }
