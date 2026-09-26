@@ -156,7 +156,7 @@ It ignores group chats, where alerts would expose every member's places.
 ## Development
 
 ```sh
-make check    # vet, staticcheck, sqlc drift check, and all tests
+make check    # gofmt, vet, staticcheck, sqlc drift check, and all tests
 make sqlc     # regenerate internal/store/gen after changing queries
 make psql     # shell into the compose database
 ```

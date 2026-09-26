@@ -9,7 +9,7 @@ export FLOODWATCH_DSN ?= postgres://floodwatch:floodwatch@localhost:5433/floodwa
 # targets that start the service.
 LOAD_ENV := if [ -f .env ]; then set -a; . ./.env; set +a; fi;
 
-.PHONY: all build test vet lint sqlc sqlc-diff check db-up db-down psql run serve up down clean
+.PHONY: all build test fmt-check vet lint sqlc sqlc-diff check db-up db-down psql run serve up down clean
 
 all: check build
 
@@ -18,6 +18,10 @@ build:
 
 test:
 	go test -race ./...
+
+# Fails listing the files gofmt would change, since gofmt itself exits 0.
+fmt-check:
+	@files=$$(gofmt -l .); if [ -n "$$files" ]; then echo "$$files"; exit 1; fi
 
 vet:
 	go vet ./...
@@ -31,7 +35,7 @@ sqlc:
 sqlc-diff:
 	$(SQLC) diff
 
-check: vet lint sqlc-diff test
+check: fmt-check vet lint sqlc-diff test
 
 db-up:
 	docker compose up -d --wait
