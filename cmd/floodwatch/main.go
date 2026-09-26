@@ -31,6 +31,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	// After the first signal starts a graceful shutdown, a second one kills.
 	context.AfterFunc(ctx, stop)
+	// Closing that session also ends the tee the output goes through, and Go
+	// kills a program by SIGPIPE when it writes to a standard stream whose
+	// reader is gone, so the first log line of the shutdown would cut it
+	// short. Ignored, such writes fail quietly and the shutdown completes.
+	signal.Ignore(syscall.SIGPIPE)
 
 	var err error
 	switch args := os.Args[1:]; {
