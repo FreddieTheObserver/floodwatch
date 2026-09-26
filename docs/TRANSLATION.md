@@ -18,12 +18,13 @@ Its changes were applied that day:
 - the tide source reads ข้อมูลคาดการณ์น้ำขึ้นน้ำลง: สสน., so the source line itself says the values are predictions;
 - the headline runs บริเวณ straight into a Thai place name, as in บริเวณบ้าน, but keeps a space before a name in Latin letters or digits, as Thai typography does.
 
-Two points were decided rather than copied, and should be confirmed at the next review:
+Two points were then put back to the reviewer, who settled both the same day:
 
 - HIGH stays วิกฤต rather than the more literal ระดับสูง.
-  The reviewer left this to what HIGH means, and in FloodWatch it means water over the bank nearby or rain beyond what Bangkok's drains carry: flooding under way, not merely a high chance of it.
-- The nothing-raised line became ระดับน้ำและปริมาณฝนที่สถานีวัดใกล้ %s ยังไม่ถึงเกณฑ์เฝ้าระวัง.
-  The reviewer rightly noted that ถึงระดับเฝ้าระวัง made the station itself sound as if it had a watch level, and suggested ที่มีระดับน้ำถึงเกณฑ์เฝ้าระวัง, but that names only water, while the line also covers rain.
+  In FloodWatch HIGH means water over the bank nearby or rain beyond what Bangkok's drains carry, flooding under way that calls for action now, which วิกฤต conveys and ระดับสูง, a mere severity grade, does not; nor does วิกฤต read as an order to evacuate.
+- The nothing-raised line reads ระดับน้ำและปริมาณฝนจากสถานีวัดใกล้บ้านยังไม่ถึงเกณฑ์เฝ้าระวัง.
+  It names both water and rain, which the line covers; จากสถานีวัด ties the measurements to the stations, so no station seems to have a watch level of its own; and ใกล้ runs straight into a Thai place name.
+  The no-recent-data line follows the same spacing, as in ไม่มีสถานีวัดใกล้บ้านส่งข้อมูล.
 
 ## How a person's language is chosen
 
