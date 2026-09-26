@@ -50,6 +50,10 @@ const (
 	risingHorizon        = 3 * time.Hour
 	risingClearCmPerHour = 2.0
 	risingClearHorizon   = 4 * time.Hour
+	// Gates near the river mouth rise 20 to 30 cm/h on every flood tide while
+	// far below their banks, so a fast rise only counts once the water is
+	// already this close.
+	risingWithinM = 0.5
 
 	// How far past a threshold a reading must fall before its severity drops,
 	// so a value hovering on a line does not alert every poll.
@@ -258,18 +262,18 @@ func assessWater(snap Snapshot, sub Subscription, n nearby, current map[Key]int)
 		level.RiseCmPerHour, rising.RiseCmPerHour = &rate, &rate
 		rising.Known = true
 		rising.Severity = hysteresis(
-			reachesBank(-aboveBank, rate, risingMinCmPerHour, risingHorizon),
-			reachesBank(-aboveBank, rate, risingClearCmPerHour, risingClearHorizon),
+			reachesBank(-aboveBank, rate, risingMinCmPerHour, risingHorizon, risingWithinM),
+			reachesBank(-aboveBank, rate, risingClearCmPerHour, risingClearHorizon, risingWithinM+waterHysteresisM),
 			current[rising.Key])
 	}
 	return []Finding{level, rising, stale}
 }
 
-// reachesBank reports SeverityWatch when water at least minRate cm/h fast would
-// cover the remaining freeboard within horizon. Water already over the bank and
-// still rising counts too.
-func reachesBank(freeboardM, rateCmPerHour, minRate float64, horizon time.Duration) int {
-	if rateCmPerHour >= minRate && freeboardM <= rateCmPerHour/100*horizon.Hours() {
+// reachesBank reports SeverityWatch when water already within withinM of the
+// bank, rising at least minRate cm/h, would cover the rest within horizon.
+// Water over the bank and still rising counts too.
+func reachesBank(freeboardM, rateCmPerHour, minRate float64, horizon time.Duration, withinM float64) int {
+	if rateCmPerHour >= minRate && freeboardM <= withinM && freeboardM <= rateCmPerHour/100*horizon.Hours() {
 		return SeverityWatch
 	}
 	return SeverityNone

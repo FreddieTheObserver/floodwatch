@@ -192,6 +192,18 @@ func TestWaterRising(t *testing.T) {
 	}
 }
 
+// Seen on 26 September 2026 at Khlong Lat Bang Yo 1 Gate: a flood tide lifting
+// the water 28 cm/h with 75 cm still to go. At that rate it would reach the
+// bank within the horizon, but the tide turns long before, so it is not news.
+func TestTidalRiseFarBelowTheBankIsNotAnAlert(t *testing.T) {
+	gate := north(1, source.KindWater, 1, mm(1.51))
+	f := newFixture().water(gate, at(70*time.Minute, 0.44), at(60*time.Minute, 0.48), at(0, 0.76))
+	got := find(t, Assess(f.snap, home, nil), 1, RuleWaterRising)
+	if !got.Known || got.Severity != SeverityNone {
+		t.Errorf("tidal rise 0.75 m below the bank = severity %d known %v, want none", got.Severity, got.Known)
+	}
+}
+
 func TestStaleWaterNeverReadsAsAllClear(t *testing.T) {
 	f := newFixture().water(north(1, source.KindWater, 1, mm(2)), at(4*time.Hour, 1.0))
 	current := map[Key]int{{SubscriptionID: 1, StationID: 1, Rule: RuleWaterLevel}: SeveritySevere}
