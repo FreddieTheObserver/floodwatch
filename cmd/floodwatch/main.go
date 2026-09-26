@@ -56,8 +56,10 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 
 	client := &http.Client{}
 	var fetchers []source.Fetcher
+	sources := []string{"thaiwater"}
 	if cfg.BMARain {
 		fetchers = append(fetchers, source.BMARain(client))
+		sources = append(sources, "bma")
 	}
 	for _, p := range cfg.Provinces {
 		fetchers = append(fetchers, source.ThaiWaterLevels(client, p), source.ThaiWaterRain(client, p))
@@ -73,7 +75,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		// Past the bot's 50 s long poll, so only a request that has truly hung
 		// is cut off, and a stuck send cannot stall the collector for ever.
 		tg := telegram.New(cfg.TelegramToken, &http.Client{Timeout: 90 * time.Second})
-		b := bot.New(tg, st, alert.NewEvaluator(st), log)
+		b := bot.New(tg, st, alert.NewEvaluator(st, sources), log)
 		afterPoll = b.Notify
 		// A rejected token ends the whole process: collecting without ever
 		// alerting would look healthy while doing nothing useful.

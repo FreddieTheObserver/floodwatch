@@ -20,7 +20,7 @@ func mm(v float64) *float64 { return &v }
 
 // north places a station km kilometres due north of home.
 func north(id int64, kind source.Kind, km float64, bank *float64) Station {
-	return Station{ID: id, Kind: kind, Name: "st", Lat: home.Lat + km/111.195, Lng: home.Lng, BankMSL: bank}
+	return Station{ID: id, Source: "thaiwater", Kind: kind, Name: "st", Lat: home.Lat + km/111.195, Lng: home.Lng, BankMSL: bank}
 }
 
 type fixture struct{ snap Snapshot }

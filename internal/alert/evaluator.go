@@ -3,6 +3,7 @@ package alert
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -17,12 +18,16 @@ type Store interface {
 }
 
 type Evaluator struct {
-	store Store
-	now   func() time.Time
+	store   Store
+	sources []string
+	now     func() time.Time
 }
 
-func NewEvaluator(store Store) *Evaluator {
-	return &Evaluator{store: store, now: time.Now}
+// NewEvaluator judges places using stations from the given sources only.
+// Readings already stored from a source that has since been switched off stay
+// unused, as they would be used without permission.
+func NewEvaluator(store Store, sources []string) *Evaluator {
+	return &Evaluator{store: store, sources: sources, now: time.Now}
 }
 
 // Digest is everything one place's subscriber should be told after an
@@ -105,6 +110,9 @@ func (e *Evaluator) snapshot(ctx context.Context) (Snapshot, error) {
 	if snap.Stations, err = e.store.ListStations(ctx); err != nil {
 		return Snapshot{}, fmt.Errorf("list stations: %w", err)
 	}
+	snap.Stations = slices.DeleteFunc(snap.Stations, func(st Station) bool {
+		return !slices.Contains(e.sources, st.Source)
+	})
 	if snap.LatestWater, err = e.store.LatestWater(ctx, now.Add(-AliveWithin)); err != nil {
 		return Snapshot{}, fmt.Errorf("latest water: %w", err)
 	}

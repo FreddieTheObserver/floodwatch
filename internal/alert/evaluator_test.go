@@ -40,7 +40,7 @@ func (m *memStore) RecordAlertStates(_ context.Context, states map[Key]int, _ bo
 }
 
 func newEvaluator(m *memStore) *Evaluator {
-	e := NewEvaluator(m)
+	e := NewEvaluator(m, []string{"thaiwater"})
 	e.now = func() time.Time { return now }
 	return e
 }
@@ -76,6 +76,23 @@ func TestPendingAckCycle(t *testing.T) {
 	clear, _ := e.Pending(ctx)
 	if len(clear) != 1 || clear[0].Changes[0].Severity != SeverityNone || clear[0].Changes[0].From != SeveritySevere {
 		t.Fatalf("receding water = %+v, want an all clear", clear)
+	}
+}
+
+func TestSwitchedOffSourcesAreNotUsed(t *testing.T) {
+	gauge := north(11, source.KindRain, 1, nil)
+	gauge.Source = "bma"
+	f := newFixture().rain(gauge, RainPoint{At: now, Rain1h: mm(50)})
+	m := &memStore{subs: []Subscription{home}, snap: f.snap, states: map[Key]int{}}
+
+	findings, err := newEvaluator(m).Status(context.Background(), home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range findings {
+		if f.Station.Source == "bma" {
+			t.Errorf("a switched-off source was used: %+v", f)
+		}
 	}
 }
 
