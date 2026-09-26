@@ -113,6 +113,11 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		collector.Run(ctx, afterPoll)
 		return nil
 	})
+	tides := collect.NewTideSyncer(source.HIITides(client), st, log, cfg.TideStations)
+	g.Go(func() error {
+		tides.Run(ctx)
+		return nil
+	})
 
 	err = g.Wait()
 	log.Info("floodwatch stopped")

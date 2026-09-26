@@ -60,6 +60,23 @@ type Subscription struct {
 	CreatedAt time.Time
 }
 
+type TidePrediction struct {
+	StationCode string
+	At          time.Time
+	LevelM      float64
+	FetchedAt   time.Time
+}
+
+type TideStation struct {
+	Code        string
+	Name        string
+	NameTh      *string
+	Lat         float64
+	Lng         float64
+	FirstSeenAt time.Time
+	LastSeenAt  time.Time
+}
+
 type WaterReading struct {
 	StationID  int64
 	ObservedAt time.Time

@@ -24,6 +24,7 @@ type Config struct {
 	// The ping URL of an outside watchdog such as healthchecks.io, which
 	// raises the alarm when floodwatch stops reporting. Empty disables it.
 	HealthcheckURL string
+	TideStations   []string
 }
 
 const (
@@ -32,12 +33,19 @@ const (
 	// Bangkok and the five provinces around it. Stations just across the border
 	// are often the nearest ones for the city's outer districts.
 	DefaultProvinces = "10,11,12,13,73,74"
+	// HII's tide stations within 30 km of Bangkok: the Chao Phraya from Navy HQ
+	// and Bangkok Harbour down to Fort Chula and Bangkok Bar at its mouth, and
+	// the Tha Chin mouth. The other stations are too far off to matter.
+	DefaultTideStations = "N01,N02,N03,N04,N05"
 
 	// The feeds are public servers that are busiest exactly when floods happen.
 	MinPollInterval = 5 * time.Minute
 )
 
-var provinceCode = regexp.MustCompile(`^[0-9]{2}$`)
+var (
+	provinceCode = regexp.MustCompile(`^[0-9]{2}$`)
+	tideCode     = regexp.MustCompile(`^[A-Z][0-9]{2}$`)
+)
 
 // Load reads the configuration through getenv and reports every invalid
 // variable at once, rather than one per restart.
@@ -48,7 +56,8 @@ func Load(getenv func(string) string) (Config, error) {
 		LogLevel:     l.level("FLOODWATCH_LOG_LEVEL"),
 		PollInterval: l.duration("FLOODWATCH_POLL_INTERVAL", DefaultPollInterval, MinPollInterval),
 		FetchTimeout: l.duration("FLOODWATCH_FETCH_TIMEOUT", DefaultFetchTimeout, time.Second),
-		Provinces:    l.provinces("FLOODWATCH_PROVINCES", DefaultProvinces),
+		Provinces:    l.codes("FLOODWATCH_PROVINCES", DefaultProvinces, provinceCode, "two-digit province codes"),
+		TideStations: l.codes("FLOODWATCH_TIDE_STATIONS", DefaultTideStations, tideCode, "HII tide station codes such as N02"),
 		// Off until the BMA Drainage Department permits automated access to its
 		// rain gauges; permission was requested on 2026-09-26.
 		BMARain:        l.boolean("FLOODWATCH_BMA_RAIN_ENABLED", false),
@@ -119,13 +128,14 @@ func (l *loader) boolean(name string, def bool) bool {
 	return b
 }
 
-func (l *loader) provinces(name, def string) []string {
+// codes reads a comma-separated list of codes, dropping repeats.
+func (l *loader) codes(name, def string, pattern *regexp.Regexp, what string) []string {
 	raw := l.text(name, def)
 	var codes []string
 	for _, part := range strings.Split(raw, ",") {
 		code := strings.TrimSpace(part)
-		if !provinceCode.MatchString(code) {
-			l.fail(name, "a comma-separated list of two-digit province codes", raw)
+		if !pattern.MatchString(code) {
+			l.fail(name, "a comma-separated list of "+what, raw)
 			return nil
 		}
 		if !slices.Contains(codes, code) {

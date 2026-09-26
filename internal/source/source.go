@@ -76,33 +76,43 @@ const (
 var utf8BOM = []byte("\xEF\xBB\xBF")
 
 func fetchJSON(ctx context.Context, client *http.Client, method, url string, v any) error {
-	req, err := http.NewRequestWithContext(ctx, method, url, http.NoBody)
+	body, err := fetch(ctx, client, method, url, "application/json")
 	if err != nil {
 		return err
 	}
+	if err := json.Unmarshal(body, v); err != nil {
+		return fmt.Errorf("%s %s: decode: %w", method, url, err)
+	}
+	return nil
+}
+
+// fetch returns a response body, bounded in size and without a UTF-8 byte
+// order mark, which some feeds prefix.
+func fetch(ctx context.Context, client *http.Client, method, url, accept string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s %s: status %d", method, url, resp.StatusCode)
+		return nil, fmt.Errorf("%s %s: status %d", method, url, resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
-		return fmt.Errorf("%s %s: read body: %w", method, url, err)
+		return nil, fmt.Errorf("%s %s: read body: %w", method, url, err)
 	}
 	if len(body) > maxBodyBytes {
-		return fmt.Errorf("%s %s: body exceeds %d bytes", method, url, maxBodyBytes)
+		return nil, fmt.Errorf("%s %s: body exceeds %d bytes", method, url, maxBodyBytes)
 	}
-	if err := json.Unmarshal(bytes.TrimPrefix(body, utf8BOM), v); err != nil {
-		return fmt.Errorf("%s %s: decode: %w", method, url, err)
-	}
-	return nil
+	return bytes.TrimPrefix(body, utf8BOM), nil
 }
 
 // num decodes a value the feeds send as a JSON number, a numeric string, an
@@ -114,17 +124,21 @@ type num struct {
 }
 
 func (n *num) UnmarshalJSON(b []byte) error {
-	*n = num{}
 	s := strings.TrimSpace(string(b))
 	if unquoted, err := strconv.Unquote(s); err == nil {
-		s = strings.TrimSpace(unquoted)
+		s = unquoted
 	}
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
-		return nil
-	}
-	*n = num{v: f, ok: true}
+	*n = parseNum(s)
 	return nil
+}
+
+// parseNum reads a number from text, as missing when it is not one.
+func parseNum(s string) num {
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+		return num{}
+	}
+	return num{v: f, ok: true}
 }
 
 func (n num) ptr() *float64 {
