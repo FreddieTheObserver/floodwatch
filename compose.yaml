@@ -1,0 +1,23 @@
+# Local development database only. Port 5433 so it can run beside CineBook's.
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-floodwatch}
+      POSTGRES_USER: ${POSTGRES_USER:-floodwatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-floodwatch}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      # Postgres 18 images put PGDATA in a subdirectory, so the mount is one level up.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-floodwatch} -d ${POSTGRES_DB:-floodwatch}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  pgdata:
